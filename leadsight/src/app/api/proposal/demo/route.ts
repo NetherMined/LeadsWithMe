@@ -5,25 +5,20 @@
  * Body: { businessId: string, proposalMarkdown?: string, screenshots?: boolean }
  *
  * 1. Generates a single-file HTML demo site for the business
- * 2. (optional) Screenshots it desktop + mobile and uploads to Supabase Storage
+ * 2. (optional) Screenshots it desktop + mobile and saves them to local storage
  * 3. Saves everything to `proposal_demos`, linked to the lead
- *
- * INTEGRATION: swap the auth/supabase imports for your real helpers, and pass
- * your lib/ai/client.ts completion fn into generateDemoHtml() if you want to
- * reuse your circuit-breaker / Pollinations fallback. Map the `businesses`
- * SELECT columns to your actual schema (esp. however you store social links).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
-import { createClient } from "@supabase/supabase-js";
 import { getAuthUser } from "@/lib/auth/server";
 import { db } from "@/lib/db/client";
 import { businesses, proposalDemos } from "@/lib/db/schema";
 import { generateCompletion } from "@/lib/ai/client";
 import { generateDemoHtml, type DemoBusiness } from "@/lib/demo/generateDemo";
 import { screenshotDemo } from "@/lib/demo/screenshotDemo";
+import { saveUserFile } from "@/lib/storage/local";
 
 export const maxDuration = 60; // allow time for generation + 2 screenshots
 
@@ -32,13 +27,6 @@ const Body = z.object({
   proposalMarkdown: z.string().optional(),
   screenshots: z.boolean().default(true),
 });
-
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
-
-const BUCKET = "proposal-demos";
 
 export async function POST(req: NextRequest) {
   try {
@@ -101,21 +89,16 @@ export async function POST(req: NextRequest) {
     if (screenshots) {
       try {
         const shots = await screenshotDemo(html);
-        const base = `${user.id}/${businessId}/${Date.now()}`;
+        const base = `proposal-demos/${businessId}/${Date.now()}`;
         const targets = [
           ["desktop", shots.desktop],
           ["mobile", shots.mobile],
         ] as const;
 
         for (const [key, buf] of targets) {
-          const path = `${base}-${key}.png`;
-          const { error: upErr } = await admin.storage
-            .from(BUCKET)
-            .upload(path, buf, { contentType: "image/png", upsert: true });
-          if (upErr) throw upErr;
-          const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(path);
-          if (key === "desktop") desktopUrl = pub.publicUrl;
-          else mobileUrl = pub.publicUrl;
+          const url = await saveUserFile(user.id, `${base}-${key}.png`, Buffer.from(buf));
+          if (key === "desktop") desktopUrl = url;
+          else mobileUrl = url;
         }
       } catch (err) {
         console.error("demo screenshot failed (non-fatal)", err);
