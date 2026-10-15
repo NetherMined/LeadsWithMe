@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { trackApiUsage } from "@/lib/usage/track";
+import { getBusinessById } from "@/lib/db/queries";
+import { db } from "@/lib/db/client";
+import { businesses } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import type { CompetitorInfo } from "@/types/business";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({ business_id: z.string().uuid() });
 
@@ -34,13 +32,8 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data: business, error } = await adminClient
-      .from("businesses")
-      .select("id, place_id, category, address_city, address, name")
-      .eq("id", business_id)
-      .single();
-
-    if (error || !business) {
+    const business = await getBusinessById(business_id, user.id);
+    if (!business) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 
@@ -106,10 +99,10 @@ export async function POST(request: NextRequest) {
       })
     );
 
-    await adminClient
-      .from("businesses")
-      .update({ competitors })
-      .eq("id", business_id);
+    await db
+      .update(businesses)
+      .set({ competitors })
+      .where(and(eq(businesses.id, business_id), eq(businesses.user_id, user.id)));
 
     return NextResponse.json({ competitors });
   } catch (error) {

@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import type { Business } from "@/types/business";
 import type { DigitalPresenceScore } from "@/types/score";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface BusinessProposalResponse {
+  score: DigitalPresenceScore | null;
+  demo: { html: string | null; proposal_md: string | null } | null;
+}
 
 interface BusinessInfoPanelProps {
   business: Business | null;
@@ -25,45 +31,42 @@ export function BusinessInfoPanel({
   const [dlBusy, setDlBusy] = useState<"md" | "html" | null>(null);
 
   useEffect(() => {
-    if (!business) {
+    // Unsaved results carry a place_id instead of a DB uuid, so there is nothing to load yet.
+    if (!business || !UUID_RE.test(business.id)) {
       setScore(null);
       setDemoMd(null);
       setDemoHtml(null);
       return;
     }
 
-    const supabase = createClient();
+    let cancelled = false;
 
-    const fetchScore = async () => {
+    const fetchProposalData = async () => {
       setScoreLoading(true);
       setScore(null);
-      const { data } = await supabase
-        .from("scores")
-        .select("*")
-        .eq("business_id", business.id)
-        .maybeSingle();
-      setScore(data);
-      setScoreLoading(false);
-    };
-
-    const fetchDemo = async () => {
       setDemoMd(null);
       setDemoHtml(null);
-      const { data } = await supabase
-        .from("proposal_demos")
-        .select("html, proposal_md")
-        .eq("business_id", business.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setDemoMd((data as { proposal_md: string | null }).proposal_md);
-        setDemoHtml((data as { html: string | null }).html);
+      try {
+        const res = await fetch(`/api/businesses/${business.id}/proposal`);
+        if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+        const data = (await res.json()) as BusinessProposalResponse;
+        if (cancelled) return;
+        setScore(data.score);
+        if (data.demo) {
+          setDemoMd(data.demo.proposal_md);
+          setDemoHtml(data.demo.html);
+        }
+      } catch (error) {
+        console.error("Failed to load business proposal data:", error);
+      } finally {
+        if (!cancelled) setScoreLoading(false);
       }
     };
 
-    fetchScore();
-    fetchDemo();
+    fetchProposalData();
+    return () => {
+      cancelled = true;
+    };
   }, [business]);
 
   function downloadBlob(content: string, filename: string, mime: string) {
@@ -110,7 +113,6 @@ export function BusinessInfoPanel({
   const handleAudit = async () => {
     if (!business) return;
 
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!UUID_RE.test(business.id)) {
       console.error("Audit skipped: business has not been saved to the database yet (id is not a UUID).");
       return;

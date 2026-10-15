@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { buildChannelsFromLinks, calculateSocialScores } from "@/lib/scraper/social";
+import { getBusinessById, upsertSocialAudit } from "@/lib/db/queries";
 import type { Business } from "@/types/business";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({ business_id: z.string().uuid() });
 
@@ -20,13 +15,8 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data: business, error } = await adminClient
-      .from("businesses")
-      .select("id, social_links, category")
-      .eq("id", business_id)
-      .single();
-
-    if (error || !business) {
+    const business = await getBusinessById(business_id, user.id);
+    if (!business) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 
@@ -42,15 +32,7 @@ export async function POST(request: NextRequest) {
       missing_platforms: scores.missingPlatforms,
     };
 
-    const { data: audit, error: upsertError } = await adminClient
-      .from("social_audits")
-      .upsert(auditData, { onConflict: "business_id" })
-      .select()
-      .single();
-
-    if (upsertError) {
-      return NextResponse.json({ error: upsertError.message }, { status: 500 });
-    }
+    const audit = await upsertSocialAudit(auditData);
 
     return NextResponse.json({ audit });
   } catch (error) {

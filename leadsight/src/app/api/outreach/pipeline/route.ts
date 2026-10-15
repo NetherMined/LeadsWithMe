@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { and, eq, getTableColumns, sql } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db/client";
+import { businesses, outreachPipeline } from "@/lib/db/schema";
+import { getBusinessById } from "@/lib/db/queries";
 
 const STATUSES = ["not_contacted", "contacted", "replied", "negotiating", "won", "lost", "ghosted"] as const;
 const CHANNELS = ["email", "linkedin", "both"] as const;
@@ -28,25 +31,38 @@ export async function GET(req: NextRequest) {
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const statusFilter = searchParams.get("status");
+  try {
+    const { searchParams } = new URL(req.url);
+    const statusFilter = searchParams.get("status");
 
-  const adminClient = createAdminClient();
+    const data = await db
+      .select({
+        ...getTableColumns(outreachPipeline),
+        businesses: {
+          name: businesses.name,
+          category: businesses.category,
+          address_city: businesses.address_city,
+          rating: businesses.rating,
+          review_count: businesses.review_count,
+        },
+      })
+      .from(outreachPipeline)
+      .innerJoin(businesses, eq(businesses.id, outreachPipeline.business_id))
+      .where(
+        statusFilter
+          ? and(eq(outreachPipeline.user_id, user.id), eq(outreachPipeline.status, statusFilter))
+          : eq(outreachPipeline.user_id, user.id)
+      )
+      .orderBy(sql`${outreachPipeline.last_contact_at} desc nulls last`);
 
-  let query = adminClient
-    .from("outreach_pipeline")
-    .select("*, businesses(name, category, address_city, rating, review_count)")
-    .eq("user_id", user.id)
-    .order("last_contact_at", { ascending: false, nullsFirst: false });
-
-  if (statusFilter) {
-    query = query.eq("status", statusFilter);
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("[Pipeline GET] failed:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load pipeline" },
+      { status: 500 }
+    );
   }
-
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json(data);
 }
 
 export async function POST(req: NextRequest) {
@@ -57,31 +73,37 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { business_id, status, channel, first_contact_at } = parsed.data;
-  const now = new Date().toISOString();
+  try {
+    const { business_id, status, channel, first_contact_at } = parsed.data;
+    const now = new Date().toISOString();
 
-  const adminClient = createAdminClient();
+    const business = await getBusinessById(business_id, user.id);
+    if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
 
-  const { data, error } = await adminClient
-    .from("outreach_pipeline")
-    .upsert(
-      {
-        business_id,
-        user_id: user.id,
-        status,
-        channel,
-        first_contact_at: first_contact_at ?? now,
-        last_contact_at: now,
-        updated_at: now,
-      },
-      { onConflict: "business_id" }
-    )
-    .select()
-    .single();
+    const values = {
+      business_id,
+      user_id: user.id,
+      status,
+      channel,
+      first_contact_at: first_contact_at ?? now,
+      last_contact_at: now,
+      updated_at: now,
+    };
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const [data] = await db
+      .insert(outreachPipeline)
+      .values(values)
+      .onConflictDoUpdate({ target: outreachPipeline.business_id, set: values })
+      .returning();
 
-  return NextResponse.json(data, { status: 201 });
+    return NextResponse.json(data, { status: 201 });
+  } catch (error) {
+    console.error("[Pipeline POST] failed:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to save pipeline entry" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PATCH(req: NextRequest) {
@@ -92,21 +114,24 @@ export async function PATCH(req: NextRequest) {
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { id, ...updates } = parsed.data;
-  const now = new Date().toISOString();
+  try {
+    const { id, ...updates } = parsed.data;
+    const now = new Date().toISOString();
 
-  const adminClient = createAdminClient();
+    const [data] = await db
+      .update(outreachPipeline)
+      .set({ ...updates, last_contact_at: now, updated_at: now })
+      .where(and(eq(outreachPipeline.id, id), eq(outreachPipeline.user_id, user.id)))
+      .returning();
 
-  const { data, error } = await adminClient
-    .from("outreach_pipeline")
-    .update({ ...updates, last_contact_at: now, updated_at: now })
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select()
-    .single();
+    if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  return NextResponse.json(data);
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("[Pipeline PATCH] failed:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to update pipeline entry" },
+      { status: 500 }
+    );
+  }
 }

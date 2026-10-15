@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { db } from "@/lib/db/client";
+import { apiUsage } from "@/lib/db/schema";
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -18,35 +15,47 @@ export async function GET() {
     const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     // Run three queries in parallel
-    const [byServiceRes, byDayRes, recentRes] = await Promise.all([
+    const [byServiceRows, byDayRows, recentRows] = await Promise.all([
       // Aggregated by service for this billing month
-      adminClient
-        .from("api_usage")
-        .select("service, estimated_cost")
-        .eq("user_id", user.id)
-        .gte("created_at", periodStart)
-        .lte("created_at", periodEnd),
+      db
+        .select({ service: apiUsage.service, estimated_cost: apiUsage.estimated_cost })
+        .from(apiUsage)
+        .where(and(
+          eq(apiUsage.user_id, user.id),
+          gte(apiUsage.created_at, periodStart),
+          lte(apiUsage.created_at, periodEnd),
+        )),
 
       // Aggregated by day for last 30 days
-      adminClient
-        .from("api_usage")
-        .select("created_at, estimated_cost")
-        .eq("user_id", user.id)
-        .gte("created_at", last30Start)
-        .order("created_at", { ascending: true }),
+      db
+        .select({ created_at: apiUsage.created_at, estimated_cost: apiUsage.estimated_cost })
+        .from(apiUsage)
+        .where(and(
+          eq(apiUsage.user_id, user.id),
+          gte(apiUsage.created_at, last30Start),
+        ))
+        .orderBy(asc(apiUsage.created_at)),
 
       // Recent 20 calls
-      adminClient
-        .from("api_usage")
-        .select("id, service, operation, estimated_cost, tokens_input, tokens_output, created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
+      db
+        .select({
+          id: apiUsage.id,
+          service: apiUsage.service,
+          operation: apiUsage.operation,
+          estimated_cost: apiUsage.estimated_cost,
+          tokens_input: apiUsage.tokens_input,
+          tokens_output: apiUsage.tokens_output,
+          created_at: apiUsage.created_at,
+        })
+        .from(apiUsage)
+        .where(eq(apiUsage.user_id, user.id))
+        .orderBy(desc(apiUsage.created_at))
         .limit(20),
     ]);
 
     // Build by-service summary
     const serviceMap: Record<string, { calls: number; cost: number }> = {};
-    for (const row of byServiceRes.data ?? []) {
+    for (const row of byServiceRows) {
       if (!serviceMap[row.service]) serviceMap[row.service] = { calls: 0, cost: 0 };
       serviceMap[row.service].calls += 1;
       serviceMap[row.service].cost  += Number(row.estimated_cost ?? 0);
@@ -84,7 +93,7 @@ export async function GET() {
 
     // Build daily breakdown
     const dayMap: Record<string, { calls: number; cost: number }> = {};
-    for (const row of byDayRes.data ?? []) {
+    for (const row of byDayRows) {
       const day = row.created_at.slice(0, 10);
       if (!dayMap[day]) dayMap[day] = { calls: 0, cost: 0 };
       dayMap[day].calls += 1;
@@ -105,7 +114,7 @@ export async function GET() {
       },
       byService,
       dailyBreakdown,
-      recentCalls: recentRes.data ?? [],
+      recentCalls: recentRows,
     });
   } catch (error) {
     console.error("Usage API error:", error);

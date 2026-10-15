@@ -1,21 +1,28 @@
+import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { businesses, marketingPlans } from "@/lib/db/schema";
+import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-type PlanRow = { id: string; business_id: string; executive_summary: string; generated_at: string; model_used: string; businesses?: { name: string }[] | null };
 
 export default async function PlansPage() {
   const user = await getAuthUser();
-  let plans: PlanRow[] = [];
-  if (user) {
-    const { data } = await adminClient.from("marketing_plans").select("id, business_id, executive_summary, generated_at, model_used, businesses(name)").order("generated_at", { ascending: false });
-    plans = (data ?? []) as unknown as PlanRow[];
-  }
+  if (!user) redirect("/login");
+
+  const plans = await db
+    .select({
+      id: marketingPlans.id,
+      business_id: marketingPlans.business_id,
+      executive_summary: marketingPlans.executive_summary,
+      generated_at: marketingPlans.generated_at,
+      model_used: marketingPlans.model_used,
+      businesses: { name: businesses.name },
+    })
+    .from(marketingPlans)
+    .innerJoin(businesses, eq(businesses.id, marketingPlans.business_id))
+    .where(eq(marketingPlans.user_id, user.id))
+    .orderBy(desc(marketingPlans.generated_at));
+
   return (
     <div className="space-y-6">
       <div>
@@ -36,7 +43,7 @@ export default async function PlansPage() {
             <div key={plan.id} className="card-surface p-5 transition-shadow hover:shadow-md">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-[14px] font-semibold text-text-primary">{plan.businesses?.[0]?.name ?? "Business"}</h3>
+                  <h3 className="text-[14px] font-semibold text-text-primary">{plan.businesses?.name ?? "Business"}</h3>
                   <p className="text-[12px] mt-1.5 line-clamp-2 text-text-secondary">{plan.executive_summary}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">

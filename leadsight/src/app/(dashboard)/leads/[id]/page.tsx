@@ -1,11 +1,9 @@
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { and, desc, eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { proposalDemos } from "@/lib/db/schema";
+import { getFullBusinessProfile } from "@/lib/db/queries";
 import { ScoreGauge } from "@/components/audit/score-gauge";
 import { WebsiteCard } from "@/components/audit/website-card";
 import { SocialCard } from "@/components/audit/social-card";
@@ -17,9 +15,7 @@ import { EmailEnricher } from "@/components/leads/email-enricher";
 import { CompetitorsCard } from "@/components/audit/competitors-card";
 import { LeadDetailTabs } from "@/components/leads/lead-detail-tabs";
 import { ProposalDownloads } from "@/components/leads/proposal-downloads";
-import type { Business, CompetitorInfo } from "@/types/business";
-import type { WebsiteAudit, SocialAudit, AdsAudit } from "@/types/audit";
-import type { DigitalPresenceScore } from "@/types/score";
+import type { CompetitorInfo } from "@/types/business";
 import { SOCIAL_ICONS } from "@/types/constants";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,17 +23,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const [businessRes, websiteRes, socialRes, adsRes, scoreRes, planRes, demoRes] = await Promise.all([
-    adminClient.from("businesses").select("*").eq("id", id).single(),
-    adminClient.from("website_audits").select("*").eq("business_id", id).order("created_at", { ascending: false }).limit(1).single(),
-    adminClient.from("social_audits").select("*").eq("business_id", id).order("created_at", { ascending: false }).limit(1).single(),
-    adminClient.from("ads_audits").select("*").eq("business_id", id).order("created_at", { ascending: false }).limit(1).single(),
-    adminClient.from("scores").select("*").eq("business_id", id).order("created_at", { ascending: false }).limit(1).single(),
-    adminClient.from("marketing_plans").select("id").eq("business_id", id).order("generated_at", { ascending: false }).limit(1).single(),
-    adminClient.from("proposal_demos").select("html, proposal_md, demo_site_url").eq("business_id", id).order("created_at", { ascending: false }).limit(1).single(),
-  ]);
+  const profile = await getFullBusinessProfile(id, user.id);
 
-  if (businessRes.error || !businessRes.data) {
+  if (!profile) {
     return (
       <div style={{ textAlign: "center", padding: "64px 24px", color: "var(--text-muted)" }}>
         Business not found.
@@ -45,13 +33,21 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  const business = businessRes.data as Business;
-  const websiteAudit = websiteRes.error ? null : websiteRes.data as WebsiteAudit;
-  const socialAudit = socialRes.error ? null : socialRes.data as SocialAudit;
-  const adsAudit = adsRes.error ? null : adsRes.data as AdsAudit;
-  const score = scoreRes.error ? null : scoreRes.data as DigitalPresenceScore;
-  const planId = planRes.error ? null : (planRes.data as { id: string } | null)?.id ?? null;
-  const demoData = demoRes.error ? null : demoRes.data as { html: string | null; proposal_md: string | null; demo_site_url: string | null } | null;
+  const { business, websiteAudit, socialAudit, adsAudit, score, plan } = profile;
+  const planId = plan?.id ?? null;
+
+  const [demo] = await db
+    .select({
+      html: proposalDemos.html,
+      proposal_md: proposalDemos.proposal_md,
+      demo_site_url: proposalDemos.demo_site_url,
+    })
+    .from(proposalDemos)
+    .where(and(eq(proposalDemos.business_id, id), eq(proposalDemos.user_id, user.id)))
+    .orderBy(desc(proposalDemos.created_at))
+    .limit(1);
+  const demoData = demo ?? null;
+
   const socials = Object.entries(business.social_links ?? {}).filter(([, v]) => !!v);
 
   return (

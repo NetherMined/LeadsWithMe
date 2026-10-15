@@ -1,4 +1,4 @@
-import type { FullBusinessProfile } from "@/lib/supabase/queries";
+import type { FullBusinessProfile } from "@/lib/db/queries";
 import type { SocialChannelAudit } from "@/types/audit";
 
 export function buildPlanPrompt(profile: FullBusinessProfile): { system: string; user: string } {

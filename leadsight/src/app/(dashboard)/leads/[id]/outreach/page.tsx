@@ -1,14 +1,8 @@
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { OutreachAssetCard } from "@/components/outreach/OutreachAssetCard";
-import type { Business } from "@/types/business";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { getBusinessById } from "@/lib/db/queries";
 
 interface OutreachPageProps {
   params: Promise<{ id: string }>;
@@ -19,11 +13,14 @@ export default async function OutreachPage({ params }: OutreachPageProps) {
   const user = await getAuthUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect("/login");
   }
 
-  const businessRes = await adminClient.from("businesses").select("name").eq("id", id).single();
-  const businessName = businessRes.error ? `Business #${id}` : (businessRes.data as Business).name;
+  const business = await getBusinessById(id, user.id);
+  if (!business) {
+    notFound();
+  }
+  const businessName = business.name;
 
   return (
     <div className="min-h-screen space-y-6 p-6">

@@ -1,11 +1,9 @@
+import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { businesses, outreachPipeline, proofSnapshots } from "@/lib/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { CaseStudyCard } from "@/components/proof/CaseStudyCard";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 interface BusinessWithSnapshots {
   id: string;
@@ -18,60 +16,66 @@ interface BusinessWithSnapshots {
 
 export default async function ProofPage() {
   const user = await getAuthUser();
-  const businesses: BusinessWithSnapshots[] = [];
+  if (!user) redirect("/login");
 
-  if (user) {
-    try {
-      // Fetch all businesses for this user
-      const { data: allBusinesses } = await adminClient
-        .from("businesses")
-        .select("id, name, category, address_city")
-        .eq("user_id", user.id);
+  const businessList: BusinessWithSnapshots[] = [];
 
-      if (allBusinesses && allBusinesses.length > 0) {
-        // For each business, check if it has proof snapshots or is in the outreach pipeline
-        const businessIds = allBusinesses.map((b) => b.id);
+  // Fetch all businesses for this user
+  const allBusinesses = await db
+    .select({
+      id: businesses.id,
+      name: businesses.name,
+      category: businesses.category,
+      address_city: businesses.address_city,
+    })
+    .from(businesses)
+    .where(eq(businesses.user_id, user.id));
 
-        // Get proof snapshots
-        const { data: snapshots } = await adminClient
-          .from("proof_snapshots")
-          .select("business_id")
-          .in("business_id", businessIds);
+  if (allBusinesses.length > 0) {
+    // For each business, check if it has proof snapshots or is in the outreach pipeline
+    const businessIds = allBusinesses.map((b) => b.id);
 
-        const businessIdsWithProof = new Set(
-          snapshots?.map((s) => s.business_id) ?? []
-        );
+    // Get proof snapshots
+    const snapshots = await db
+      .select({ business_id: proofSnapshots.business_id })
+      .from(proofSnapshots)
+      .where(and(eq(proofSnapshots.user_id, user.id), inArray(proofSnapshots.business_id, businessIds)));
 
-        // Get pipeline deals (won/lost status)
-        const { data: pipeline } = await adminClient
-          .from("outreach_pipeline")
-          .select("business_id, status, won_amount")
-          .in("business_id", businessIds)
-          .in("status", ["won", "lost"]);
+    const businessIdsWithProof = new Set(snapshots.map((s) => s.business_id));
 
-        const pipelineMap = new Map(
-          (pipeline ?? []).map((p) => [p.business_id, p])
-        );
+    // Get pipeline deals (won/lost status)
+    const pipeline = await db
+      .select({
+        business_id: outreachPipeline.business_id,
+        status: outreachPipeline.status,
+        won_amount: outreachPipeline.won_amount,
+      })
+      .from(outreachPipeline)
+      .where(
+        and(
+          eq(outreachPipeline.user_id, user.id),
+          inArray(outreachPipeline.business_id, businessIds),
+          inArray(outreachPipeline.status, ["won", "lost"])
+        )
+      );
 
-        // Combine: include any business with proof snapshots or pipeline status
-        const filteredBusinesses = allBusinesses.filter((b) => {
-          const hasProof = businessIdsWithProof.has(b.id);
-          const hasPipeline = pipelineMap.has(b.id);
-          return hasProof || hasPipeline;
-        });
+    const pipelineMap = new Map(pipeline.map((p) => [p.business_id, p]));
 
-        // Enrich with pipeline data
-        for (const biz of filteredBusinesses) {
-          const pipelineData = pipelineMap.get(biz.id);
-          businesses.push({
-            ...biz,
-            won_amount: pipelineData?.won_amount ?? null,
-            pipeline_status: pipelineData?.status ?? null,
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch businesses:", err);
+    // Combine: include any business with proof snapshots or pipeline status
+    const filteredBusinesses = allBusinesses.filter((b) => {
+      const hasProof = businessIdsWithProof.has(b.id);
+      const hasPipeline = pipelineMap.has(b.id);
+      return hasProof || hasPipeline;
+    });
+
+    // Enrich with pipeline data
+    for (const biz of filteredBusinesses) {
+      const pipelineData = pipelineMap.get(biz.id);
+      businessList.push({
+        ...biz,
+        won_amount: pipelineData?.won_amount ?? null,
+        pipeline_status: pipelineData?.status ?? null,
+      });
     }
   }
 
@@ -81,14 +85,14 @@ export default async function ProofPage() {
       <div>
         <h1 className="text-3xl font-bold" style={{ color: "var(--text-primary)" }}>Case Studies & Proof</h1>
         <p className="mt-2" style={{ color: "var(--text-secondary)" }}>
-          {businesses.length > 0
-            ? `${businesses.length} case stud${businesses.length === 1 ? "y" : "ies"}`
+          {businessList.length > 0
+            ? `${businessList.length} case stud${businessList.length === 1 ? "y" : "ies"}`
             : "Track before/after metrics for delivered client work"}
         </p>
       </div>
 
       {/* Content */}
-      {businesses.length === 0 ? (
+      {businessList.length === 0 ? (
         <div className="rounded-lg border-2 border-dashed p-12 text-center" style={{ borderColor: "rgba(255,255,255,0.07)", background: "var(--bg-elevated)" }}>
           <p className="mb-2" style={{ color: "var(--text-secondary)" }}>No proof snapshots yet.</p>
           <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
@@ -97,7 +101,7 @@ export default async function ProofPage() {
         </div>
       ) : (
         <div className="grid gap-6">
-          {businesses.map((biz) => (
+          {businessList.map((biz) => (
             <CaseStudyCard
               key={biz.id}
               businessId={biz.id}

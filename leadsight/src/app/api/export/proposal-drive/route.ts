@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { exports } from "@/lib/db/schema";
+import { getBusinessById } from "@/lib/db/queries";
 import { getValidGoogleToken } from "@/lib/google/auth";
 import { getOrCreateLeadSightFolder, getOrCreateBusinessFolder, moveFileToFolder } from "@/lib/google/drive";
 import { google } from "googleapis";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({
   business_id: z.string().uuid(),
@@ -26,14 +23,10 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     // Get business name for doc title (scoped to user)
-    const { data: business } = await adminClient
-      .from("businesses")
-      .select("name")
-      .eq("id", business_id)
-      .eq("user_id", user.id)
-      .single();
+    const business = await getBusinessById(business_id, user.id);
+    if (!business) return NextResponse.json({ error: "Business not found" }, { status: 404 });
 
-    const businessName = business?.name ?? "Business";
+    const businessName = business.name;
     const date = new Date().toLocaleDateString("en-ZA");
     const docTitle = filename?.replace(".md", "") ?? `Website Proposal - ${businessName} - ${date}`;
 
@@ -61,13 +54,13 @@ export async function POST(request: NextRequest) {
     await moveFileToFolder(accessToken, documentId, bizFolderId);
 
     // Log export (non-fatal — fire and forget)
-    void adminClient.from("exports").insert({
+    void db.insert(exports).values({
       user_id: user.id,
       type: "docs",
       google_file_id: documentId,
       google_file_url: `https://docs.google.com/document/d/${documentId}`,
       business_ids: [business_id],
-    });
+    }).catch((err) => console.warn("[ProposalDrive] export record insert failed:", err));
 
     return NextResponse.json({ url: `https://docs.google.com/document/d/${documentId}` });
   } catch (error) {

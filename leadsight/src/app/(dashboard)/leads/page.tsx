@@ -2,26 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { getAuthUser } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
-import type { Business } from "@/types/business";
+import { getBusinessesByUser } from "@/lib/db/queries";
 import { LeadsClient } from "@/components/leads/leads-client";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export default async function LeadsPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const { data } = await adminClient
-    .from("businesses")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
-
-  const businesses = (data ?? []) as Business[];
+  const businesses = await getBusinessesByUser(user.id);
 
   // Derive unique filter options from stored data
   const categories = [...new Set(businesses.map(b => b.category).filter(Boolean))].sort();

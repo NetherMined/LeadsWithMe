@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { and, eq, desc } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db/client";
+import { adsAudits, outreachAssets, socialAudits, websiteAudits } from "@/lib/db/schema";
+import { getBusinessById } from "@/lib/db/queries";
+import type { WebsiteAudit, SocialAudit, AdsAudit } from "@/types/audit";
 import { generateOutreachAssets } from "@/lib/outreach/generator";
 import { trackApiUsage } from "@/lib/usage/track";
 
@@ -23,20 +27,16 @@ export async function POST(req: NextRequest) {
 
   const { business_id, positioning_profile, target_currency, flat_fee, delivery_days } = parsed.data;
 
-  const adminClient = createAdminClient();
-
-  const [businessRes, websiteRes, socialRes, adsRes] = await Promise.all([
-    adminClient.from("businesses").select("*").eq("id", business_id).eq("user_id", user.id).single(),
-    adminClient.from("website_audits").select("*").eq("business_id", business_id).maybeSingle(),
-    adminClient.from("social_audits").select("*").eq("business_id", business_id).maybeSingle(),
-    adminClient.from("ads_audits").select("*").eq("business_id", business_id).maybeSingle(),
-  ]);
-
-  if (businessRes.error || !businessRes.data) {
+  const business = await getBusinessById(business_id, user.id);
+  if (!business) {
     return NextResponse.json({ error: "Business not found" }, { status: 404 });
   }
 
-  const business = businessRes.data;
+  const [[websiteAudit], [socialAudit], [adsAudit]] = await Promise.all([
+    db.select().from(websiteAudits).where(eq(websiteAudits.business_id, business_id)).limit(1),
+    db.select().from(socialAudits).where(eq(socialAudits.business_id, business_id)).limit(1),
+    db.select().from(adsAudits).where(eq(adsAudits.business_id, business_id)).limit(1),
+  ]);
 
   let assets;
   try {
@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
       city: business.address_city ?? business.address?.split(",").pop()?.trim() ?? "",
       category: business.category ?? business.search_term ?? "",
       audits: {
-        website: websiteRes.data ?? null,
-        social: socialRes.data ?? null,
-        ads: adsRes.data ?? null,
+        website: (websiteAudit as unknown as WebsiteAudit) ?? null,
+        social: (socialAudit as unknown as SocialAudit) ?? null,
+        ads: (adsAudit as unknown as AdsAudit) ?? null,
       },
       positioning: positioning_profile,
       feeAmount: flat_fee,
@@ -65,26 +65,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 422 });
   }
 
-  const { data: inserted, error: insertError } = await adminClient
-    .from("outreach_assets")
-    .insert({
-      business_id,
-      user_id: user.id,
-      loom_script: JSON.stringify(assets.loom_script),
-      email_subject: assets.email_subject,
-      email_body: assets.email_body,
-      linkedin_connect_note: assets.linkedin_connect_note,
-      linkedin_followup: assets.linkedin_followup,
-      flat_fee_amount: flat_fee ?? null,
-      flat_fee_currency: target_currency ?? "GBP",
-      delivery_days: delivery_days ?? 5,
-      identified_issues: assets.identified_issues,
-    })
-    .select()
-    .single();
-
-  if (insertError) {
-    console.error("outreach_assets insert:", insertError.message);
+  let inserted;
+  try {
+    [inserted] = await db
+      .insert(outreachAssets)
+      .values({
+        business_id,
+        user_id: user.id,
+        loom_script: JSON.stringify(assets.loom_script),
+        email_subject: assets.email_subject,
+        email_body: assets.email_body,
+        linkedin_connect_note: assets.linkedin_connect_note,
+        linkedin_followup: assets.linkedin_followup,
+        flat_fee_amount: flat_fee ?? null,
+        flat_fee_currency: target_currency ?? "GBP",
+        delivery_days: delivery_days ?? 5,
+        identified_issues: assets.identified_issues as unknown,
+      })
+      .returning();
+  } catch (err: unknown) {
+    console.error("outreach_assets insert:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ error: "Failed to save outreach assets" }, { status: 500 });
   }
 
   await trackApiUsage({

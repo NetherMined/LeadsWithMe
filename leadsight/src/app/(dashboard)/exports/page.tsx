@@ -1,20 +1,22 @@
+import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { exports as exportsTable } from "@/lib/db/schema";
+import { desc, eq } from "drizzle-orm";
 import { ExportHistory } from "@/components/export/export-history";
 import type { ExportRecord } from "@/types/export";
 
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export default async function ExportsPage() {
   const user = await getAuthUser();
-  let exports: ExportRecord[] = [];
-  if (user) {
-    const { data } = await adminClient.from("exports").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-    exports = (data ?? []) as ExportRecord[];
-  }
+  if (!user) redirect("/login");
+
+  const rows = await db
+    .select()
+    .from(exportsTable)
+    .where(eq(exportsTable.user_id, user.id))
+    .orderBy(desc(exportsTable.created_at));
+  const exports = rows as unknown as ExportRecord[];
+
   return (
     <div className="space-y-6">
       <div>

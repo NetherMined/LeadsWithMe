@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { and, eq, inArray } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { businesses, exports, scores } from "@/lib/db/schema";
 import { exportLeadsToSheet } from "@/lib/google/sheets";
 import { getOrCreateLeadSightFolder, moveFileToFolder } from "@/lib/google/drive";
 import { getValidGoogleToken } from "@/lib/google/auth";
 import type { Business } from "@/types/business";
 import type { DigitalPresenceScore } from "@/types/score";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({ business_ids: z.array(z.string().uuid()).min(1) });
 
@@ -23,17 +20,20 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // Fetch businesses + scores in parallel (scoped to user)
-    const [businessesRes, scoresRes] = await Promise.all([
-      adminClient.from("businesses").select("*").in("id", business_ids).eq("user_id", user.id),
-      adminClient.from("scores").select("*").in("business_id", business_ids),
+    // Fetch businesses + scores in parallel (businesses scoped to user)
+    const [businessRows, scoreRows] = await Promise.all([
+      db
+        .select()
+        .from(businesses)
+        .where(and(inArray(businesses.id, business_ids), eq(businesses.user_id, user.id))),
+      db.select().from(scores).where(inArray(scores.business_id, business_ids)),
     ]);
 
-    const businesses = (businessesRes.data ?? []) as Business[];
-    const scores = (scoresRes.data ?? []) as DigitalPresenceScore[];
-    const scoreMap = new Map(scores.map(s => [s.business_id, s]));
+    const businessList = businessRows as unknown as Business[];
+    const scoreList = scoreRows as unknown as DigitalPresenceScore[];
+    const scoreMap = new Map(scoreList.map(s => [s.business_id, s]));
 
-    const businessesWithScores = businesses.map(b => ({
+    const businessesWithScores = businessList.map(b => ({
       ...b,
       score: scoreMap.get(b.id) ?? null,
     }));
@@ -49,14 +49,14 @@ export async function POST(request: NextRequest) {
 
     await moveFileToFolder(accessToken, sheetResult.spreadsheetId, folderId);
 
-    // Record export
-    await adminClient.from("exports").insert({
+    // The Google file already exists; a failed history row must not hide its URL from the user.
+    await db.insert(exports).values({
       user_id: user.id,
       type: "sheets",
       google_file_id: sheetResult.spreadsheetId,
       google_file_url: sheetResult.spreadsheetUrl,
       business_ids,
-    });
+    }).catch((err) => console.error("[export/sheets] failed to record export:", err));
 
     return NextResponse.json({ url: sheetResult.spreadsheetUrl });
   } catch (error) {

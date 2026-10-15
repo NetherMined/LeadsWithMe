@@ -1,12 +1,8 @@
 // src/lib/competitor/finder.ts
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { businesses, scores } from "@/lib/db/schema";
 import type { Business } from "@/types/business";
-import type { DigitalPresenceScore } from "@/types/score";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const EARTH_RADIUS_KM = 6371;
 const MAX_RADIUS_KM = 5;
@@ -24,22 +20,27 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 /**
  * Find the top competitor for a business.
- * Strategy 1: Query Supabase for same-category businesses within 5km, pick highest score.
+ * Strategy 1: Query the owner's same-category businesses within 5km, pick highest score.
  * Strategy 2: Fall back to business.competitors[] sorted by rating × review_count.
  * Returns null if no suitable competitor found.
  */
 export async function findTopCompetitor(business: Business): Promise<Business | null> {
   // Strategy 1: Query our own DB for scored businesses in same category
-  const { data: candidates } = await adminClient
-    .from("businesses")
-    .select("*")
-    .eq("category", business.category)
-    .neq("id", business.id)
-    .not("website", "is", null);
+  const candidates = (await db
+    .select()
+    .from(businesses)
+    .where(
+      and(
+        eq(businesses.user_id, business.user_id),
+        eq(businesses.category, business.category),
+        ne(businesses.id, business.id),
+        isNotNull(businesses.website)
+      )
+    )) as unknown as Business[];
 
   if (candidates && candidates.length > 0) {
     // Filter to 5km radius
-    const nearby = (candidates as Business[]).filter(c => {
+    const nearby = candidates.filter(c => {
       if (!c.latitude || !c.longitude) return false;
       return haversineKm(business.latitude, business.longitude, c.latitude, c.longitude) <= MAX_RADIUS_KM;
     });
@@ -47,13 +48,12 @@ export async function findTopCompetitor(business: Business): Promise<Business | 
     if (nearby.length > 0) {
       // Fetch scores for nearby businesses
       const nearbyIds = nearby.map(b => b.id);
-      const { data: scores } = await adminClient
-        .from("scores")
-        .select("business_id, total_score")
-        .in("business_id", nearbyIds);
+      const nearbyScores = await db
+        .select({ business_id: scores.business_id, total_score: scores.total_score })
+        .from(scores)
+        .where(inArray(scores.business_id, nearbyIds));
 
-      const scoreMap = new Map((scores as Pick<DigitalPresenceScore, "business_id" | "total_score">[] ?? [])
-        .map(s => [s.business_id, s.total_score]));
+      const scoreMap = new Map(nearbyScores.map(s => [s.business_id, s.total_score]));
 
       // Sort by score desc, then rating × review_count
       const sorted = nearby.sort((a, b) => {

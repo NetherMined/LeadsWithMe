@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { businesses as businessesTable, websiteAudits } from "@/lib/db/schema";
+import { and, eq } from "drizzle-orm";
 import { enrichWebsite } from "@/lib/scraper/website";
 import { enrichFromWebSearch, isBlockedDomain } from "@/lib/scraper/web-search";
 import type { Business, BusinessReview, SocialLinks, WebResult } from "@/types/business";
 import { trackApiUsage } from "@/lib/usage/track";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const searchSchema = z.object({
   query: z.string().min(1),
@@ -340,21 +337,16 @@ export async function POST(request: NextRequest) {
       const e = enriched[i];
 
       // Return existing record without re-scraping
-      const { data: existing, error: selectError } = await adminClient
-        .from("businesses")
-        .select("id")
-        .eq("place_id", place.id)
-        .eq("user_id", user.id)
-        .single();
-      if (selectError && selectError.code !== "PGRST116") {
-        // PGRST116 = "no rows found" — expected when business is new; anything else is a real error
-        console.error("[Search] Select failed for", place.displayName.text, selectError.message, selectError.code ?? "");
-      }
+      const [existing] = await db
+        .select({ id: businessesTable.id })
+        .from(businessesTable)
+        .where(and(eq(businessesTable.place_id, place.id), eq(businessesTable.user_id, user.id)))
+        .limit(1);
 
       if (existing) {
-        const { data: b } = await adminClient.from("businesses").select("*").eq("id", existing.id).single();
+        const [b] = await db.select().from(businessesTable).where(eq(businessesTable.id, existing.id)).limit(1);
         if (b) {
-          const biz = b as Business;
+          const biz = b as unknown as Business;
           const socialLinks = biz.social_links ?? {};
           const allSocialsNull = Object.values(socialLinks).every(v => !v);
           const needsEnrichment = allSocialsNull || !biz.email || !biz.website || !biz.mobile || !biz.whatsapp
@@ -388,13 +380,12 @@ export async function POST(request: NextRequest) {
               updatePayload.web_results = e.webResults;
             }
             if (Object.keys(updatePayload).length > 1) {
-              const { data: updated } = await adminClient
-                .from("businesses")
-                .update(updatePayload)
-                .eq("id", existing.id)
-                .select()
-                .single();
-              if (updated) { businesses.push(updated as Business); continue; }
+              const [updated] = await db
+                .update(businessesTable)
+                .set(updatePayload as Partial<typeof businessesTable.$inferInsert>)
+                .where(and(eq(businessesTable.id, existing.id), eq(businessesTable.user_id, user.id)))
+                .returning();
+              if (updated) { businesses.push(updated as unknown as Business); continue; }
             }
           }
           businesses.push(biz);
@@ -404,50 +395,61 @@ export async function POST(request: NextRequest) {
 
       const category = place.types?.[0]?.replace(/_/g, " ") ?? query;
 
-      const { data: inserted, error } = await adminClient
-        .from("businesses")
-        .insert({
-          user_id: user.id,
-          place_id: place.id,
-          name: place.displayName.text,
-          address: place.formattedAddress,
-          phone: e.phone,
-          website: e.website,
-          email: e.email,
-          emails: e.emails,
-          mobile: e.mobile,
-          whatsapp: e.whatsapp,
-          hours: e.hours,
-          search_term: query,
-          category,
-          rating: place.rating ?? null,
-          review_count: place.userRatingCount ?? 0,
-          latitude: place.location.latitude,
-          longitude: place.location.longitude,
-          social_links: e.socialLinks,
-          google_maps_url: e.google_maps_url,
-          description: e.description,
-          is_open_now: e.is_open_now,
-          hours_weekly: e.hours_weekly,
-          photo_references: e.photo_references,
-          photo_count: e.photo_count,
-          photo_primary: e.photo_primary,
-          photos: e.photos,
-          reviews: e.reviews,
-          // address_* matches migration 009 column names
-          address_street: e.addressParsed.street,
-          address_suburb: e.addressParsed.suburb,
-          address_city: e.addressParsed.city,
-          address_postal_code: e.addressParsed.postal_code,
-          address_country: e.addressParsed.country,
-          social_channel_count: e.socialChannelCount,
-          web_results: e.webResults,
-        })
-        .select()
-        .single();
+      const values = {
+        user_id: user.id,
+        place_id: place.id,
+        name: place.displayName.text,
+        address: place.formattedAddress,
+        phone: e.phone,
+        website: e.website,
+        email: e.email,
+        emails: e.emails,
+        mobile: e.mobile,
+        whatsapp: e.whatsapp,
+        hours: e.hours,
+        search_term: query,
+        category,
+        rating: place.rating ?? null,
+        review_count: place.userRatingCount ?? 0,
+        latitude: place.location.latitude,
+        longitude: place.location.longitude,
+        social_links: e.socialLinks,
+        google_maps_url: e.google_maps_url,
+        description: e.description,
+        is_open_now: e.is_open_now,
+        hours_weekly: e.hours_weekly,
+        photo_references: e.photo_references,
+        photo_count: e.photo_count,
+        photo_primary: e.photo_primary,
+        photos: e.photos,
+        reviews: e.reviews,
+        // address_* matches migration 009 column names
+        address_street: e.addressParsed.street,
+        address_suburb: e.addressParsed.suburb,
+        address_city: e.addressParsed.city,
+        address_postal_code: e.addressParsed.postal_code,
+        address_country: e.addressParsed.country,
+        social_channel_count: e.socialChannelCount,
+        web_results: e.webResults,
+      };
 
-      if (error) {
-        console.error("[Search] Insert failed for", place.displayName.text, error.message, error.code ?? "");
+      let inserted: Business | undefined;
+      try {
+        // Conflict on (user_id, place_id) means a concurrent request already saved this place
+        const [row] = await db
+          .insert(businessesTable)
+          .values(values)
+          .onConflictDoUpdate({
+            target: [businessesTable.user_id, businessesTable.place_id],
+            set: values,
+          })
+          .returning();
+        inserted = row as unknown as Business;
+      } catch (error) {
+        console.error("[Search] Insert failed for", place.displayName.text, error);
+      }
+
+      if (!inserted) {
         // DB unavailable — still return the enriched data so results display
         const now = new Date().toISOString();
         businesses.push({
@@ -508,27 +510,27 @@ export async function POST(request: NextRequest) {
           updated_at: now,
           is_stale: null,
         } as Business);
-      } else if (inserted) {
-        businesses.push(inserted as Business);
+      } else {
+        businesses.push(inserted);
       }
     }
 
     // Apply stale_only filter if requested
     let filteredBusinesses = businesses;
     if (stale_only) {
-      // Fetch all website_audits and their last_audit_at (created_at)
-      const { data: audits } = await adminClient
-        .from("website_audits")
-        .select("business_id, created_at");
+      // Fetch the caller's website_audits and their last_audit_at (created_at)
+      const audits = await db
+        .select({ business_id: websiteAudits.business_id, created_at: websiteAudits.created_at })
+        .from(websiteAudits)
+        .innerJoin(businessesTable, eq(businessesTable.id, websiteAudits.business_id))
+        .where(eq(businessesTable.user_id, user.id));
 
       const auditMap = new Map<string, string>();
-      if (audits) {
-        for (const audit of audits) {
-          const businessId = audit.business_id;
-          const createdAt = audit.created_at;
-          if (createdAt) {
-            auditMap.set(businessId, createdAt);
-          }
+      for (const audit of audits) {
+        const businessId = audit.business_id;
+        const createdAt = audit.created_at;
+        if (createdAt) {
+          auditMap.set(businessId, createdAt);
         }
       }
 
@@ -549,18 +551,18 @@ export async function POST(request: NextRequest) {
         .filter(b => b.is_stale === true || b.is_stale === null);
     } else {
       // Not filtering by stale, but still mark staleness for display
-      const { data: audits } = await adminClient
-        .from("website_audits")
-        .select("business_id, created_at");
+      const audits = await db
+        .select({ business_id: websiteAudits.business_id, created_at: websiteAudits.created_at })
+        .from(websiteAudits)
+        .innerJoin(businessesTable, eq(businessesTable.id, websiteAudits.business_id))
+        .where(eq(businessesTable.user_id, user.id));
 
       const auditMap = new Map<string, string>();
-      if (audits) {
-        for (const audit of audits) {
-          const businessId = audit.business_id;
-          const createdAt = audit.created_at;
-          if (createdAt) {
-            auditMap.set(businessId, createdAt);
-          }
+      for (const audit of audits) {
+        const businessId = audit.business_id;
+        const createdAt = audit.created_at;
+        if (createdAt) {
+          auditMap.set(businessId, createdAt);
         }
       }
 

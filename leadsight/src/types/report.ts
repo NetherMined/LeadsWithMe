@@ -137,7 +137,7 @@ export interface ABTestSuggestion {
 }
 
 export interface PDFReportData {
-  profile: import("@/lib/supabase/queries").FullBusinessProfile;
+  profile: import("@/lib/db/queries").FullBusinessProfile;
   competitor: import("@/types/business").Business | null;
   comparison: SiteComparison | null;
   abTests: ABTestSuggestion[];

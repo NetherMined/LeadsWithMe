@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { generateCompletion } from "@/lib/ai/client";
+import { getBusinessById } from "@/lib/db/queries";
 import type { Business, SocialLinks, WebResult } from "@/types/business";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({ business_id: z.string().uuid() });
 
@@ -65,13 +60,8 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { data: business, error } = await adminClient
-      .from("businesses")
-      .select("id, name, category, address, address_city, address_suburb, social_links, web_results, rating, review_count, description, phone")
-      .eq("id", business_id)
-      .single();
-
-    if (error || !business) {
+    const business = await getBusinessById(business_id, user.id);
+    if (!business) {
       return NextResponse.json({ error: "Business not found" }, { status: 404 });
     }
 

@@ -2,8 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { getFullBusinessProfile } from "@/lib/supabase/queries";
+import { db } from "@/lib/db/client";
+import { exports } from "@/lib/db/schema";
+import { getFullBusinessProfile } from "@/lib/db/queries";
 import { launchBrowser, closeBrowser } from "@/lib/scraper/browser";
 import { findTopCompetitor } from "@/lib/competitor/finder";
 import { captureScreenshots } from "@/lib/screenshots/capture";
@@ -15,11 +16,6 @@ import type { SiteComparison, ABTestSuggestion, ScreenshotResult, PDFReportData 
 import type { Business } from "@/types/business";
 
 export const maxDuration = 60;
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({
   business_id: z.string().uuid(),
@@ -37,17 +33,9 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // Verify business belongs to user
-    const { data: biz } = await adminClient
-      .from("businesses")
-      .select("id")
-      .eq("id", business_id)
-      .eq("user_id", user.id)
-      .single();
-    if (!biz) return NextResponse.json({ error: "Business not found" }, { status: 404 });
-
-    // 1. Fetch full business profile
-    const profile = await getFullBusinessProfile(business_id);
+    // 1. Fetch full business profile (null when the business is missing or not owned by user)
+    const profile = await getFullBusinessProfile(business_id, user.id);
+    if (!profile) return NextResponse.json({ error: "Business not found" }, { status: 404 });
     if (!profile.plan) {
       return NextResponse.json(
         { error: "Business must have a marketing plan before generating a PDF report. Run the scoring and plan generation first." },
@@ -121,16 +109,14 @@ export async function POST(request: NextRequest) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const fileName = `${profile.business.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-report-${timestamp}.pdf`;
 
-    // 10. Record export (no storage URL)
-    await adminClient.from("exports").insert({
+    // 10. Record export (no storage URL). Non-fatal: the PDF is already generated.
+    await db.insert(exports).values({
       user_id: user.id,
       type: "pdf",
       google_file_id: null,
       google_file_url: null,
       business_ids: [business_id],
-    }).then(({ error }) => {
-      if (error) console.warn("[pdf] export record insert failed:", error.message);
-    });
+    }).catch((err) => console.warn("[pdf] export record insert failed:", err));
 
     // 11. Return PDF directly as binary response
     return new Response(pdfBuffer as unknown as BodyInit, {

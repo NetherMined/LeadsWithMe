@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { businesses, exports, marketingPlans } from "@/lib/db/schema";
 import { exportPlanToDoc } from "@/lib/google/docs";
 import { getOrCreateLeadSightFolder, moveFileToFolder } from "@/lib/google/drive";
 import { getValidGoogleToken } from "@/lib/google/auth";
 import type { Business } from "@/types/business";
 import type { MarketingPlan } from "@/types/plan";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const schema = z.object({ plan_id: z.string().uuid() });
 
@@ -24,18 +21,18 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     // Fetch plan + business (scoped to user)
-    const { data: plan, error: planError } = await adminClient
-      .from("marketing_plans")
-      .select("*, businesses(*)")
-      .eq("id", plan_id)
-      .eq("user_id", user.id)
-      .single();
+    const [plan] = await db
+      .select({ ...getTableColumns(marketingPlans), businesses: getTableColumns(businesses) })
+      .from(marketingPlans)
+      .innerJoin(businesses, eq(businesses.id, marketingPlans.business_id))
+      .where(and(eq(marketingPlans.id, plan_id), eq(marketingPlans.user_id, user.id)))
+      .limit(1);
 
-    if (planError || !plan) {
+    if (!plan) {
       return NextResponse.json({ error: "Plan not found" }, { status: 404 });
     }
 
-    const typedPlan = plan as MarketingPlan & { businesses: Business };
+    const typedPlan = plan as unknown as MarketingPlan & { businesses: Business };
     const accessToken = await getValidGoogleToken(user.id);
 
     const [docResult, folderId] = await Promise.all([
@@ -45,13 +42,14 @@ export async function POST(request: NextRequest) {
 
     await moveFileToFolder(accessToken, docResult.documentId, folderId);
 
-    await adminClient.from("exports").insert({
+    // The Google file already exists; a failed history row must not hide its URL from the user.
+    await db.insert(exports).values({
       user_id: user.id,
       type: "docs",
       google_file_id: docResult.documentId,
       google_file_url: docResult.documentUrl,
       business_ids: [typedPlan.business_id],
-    });
+    }).catch((err) => console.error("[export/docs] failed to record export:", err));
 
     return NextResponse.json({ url: docResult.documentUrl });
   } catch (error) {

@@ -1,10 +1,7 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { db } from "@/lib/db/client";
+import { apiUsage } from "@/lib/db/schema";
+import { isUuid } from "@/lib/db/queries";
 import { estimateCost } from "./costs";
-
-const adminClient = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export interface UsageEvent {
   userId: string;
@@ -24,10 +21,13 @@ export async function trackApiUsage(event: UsageEvent): Promise<void> {
     event.tokensOutput,
   );
 
+  // api_usage.user_id is a uuid FK; skip rows we cannot attribute rather than fail the insert.
+  if (!isUuid(event.userId)) return;
+
   try {
-    await adminClient
-      .from("api_usage")
-      .insert({
+    await db
+      .insert(apiUsage)
+      .values({
         user_id:        event.userId,
         service:        event.service,
         operation:      event.operation,
@@ -36,5 +36,8 @@ export async function trackApiUsage(event: UsageEvent): Promise<void> {
         tokens_output:  event.tokensOutput ?? null,
         metadata:       event.metadata ?? {},
       });
-  } catch { /* silently ignore */ }
+  } catch (err) {
+    // Usage tracking must never break the request it is measuring.
+    console.error("[trackApiUsage] insert failed:", err);
+  }
 }
