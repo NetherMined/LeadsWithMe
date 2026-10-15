@@ -1,4 +1,4 @@
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { ExportHistory } from "@/components/export/export-history";
 import type { ExportRecord } from "@/types/export";

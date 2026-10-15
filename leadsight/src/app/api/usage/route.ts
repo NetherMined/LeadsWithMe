@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
 const adminClient = createSupabaseClient(

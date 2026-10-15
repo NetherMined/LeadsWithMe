@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 import type { Business } from "@/types/business";
 import { LeadsClient } from "@/components/leads/leads-client";

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser, createAdminClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { runPageSpeedAudit } from "@/lib/scraper/website";
 
 const schema = z.object({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser, createAdminClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 const STATUSES = ["not_contacted", "contacted", "replied", "negotiating", "won", "lost", "ghosted"] as const;
 const CHANNELS = ["email", "linkedin", "both"] as const;

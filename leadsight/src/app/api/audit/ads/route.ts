@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { checkMetaAds, checkGoogleAds, estimateDomainAuthority } from "@/lib/scraper/ads";
 import type { Business } from "@/types/business";

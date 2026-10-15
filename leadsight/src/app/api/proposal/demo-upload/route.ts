@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

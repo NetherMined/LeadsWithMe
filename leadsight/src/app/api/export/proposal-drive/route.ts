@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getValidGoogleToken } from "@/lib/google/auth";
 import { getOrCreateLeadSightFolder, getOrCreateBusinessFolder, moveFileToFolder } from "@/lib/google/drive";

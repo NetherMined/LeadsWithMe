@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { enrichWebsite } from "@/lib/scraper/website";
 import { enrichFromWebSearch, isBlockedDomain } from "@/lib/scraper/web-search";

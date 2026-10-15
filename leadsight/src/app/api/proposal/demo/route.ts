@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { generateCompletion } from "@/lib/ai/client";
 import { generateDemoHtml, type DemoBusiness } from "@/lib/demo/generateDemo";
 import { screenshotDemo } from "@/lib/demo/screenshotDemo";

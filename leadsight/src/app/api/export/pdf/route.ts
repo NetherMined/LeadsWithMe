@@ -1,7 +1,7 @@
 // src/app/api/export/pdf/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { getFullBusinessProfile } from "@/lib/supabase/queries";
 import { launchBrowser, closeBrowser } from "@/lib/scraper/browser";

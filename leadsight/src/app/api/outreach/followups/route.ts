@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAuthUser, createAdminClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function GET() {
   const user = await getAuthUser();

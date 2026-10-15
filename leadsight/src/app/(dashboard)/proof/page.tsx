@@ -1,4 +1,4 @@
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { CaseStudyCard } from "@/components/proof/CaseStudyCard";
 

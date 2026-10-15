@@ -43,17 +43,17 @@ export function BusinessMap({ businesses, center, onBusinessSelect, selectedBusi
 
       // Light tiles + CSS invert on .leaflet-tile-pane → dark grey matching site palette
       L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-        { subdomains: "abcd", maxZoom: 19 }
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        { maxZoom: 19 }
       ).addTo(map);
 
       // Custom zoom control positioned bottom-right
       L.control.zoom({ position: "bottomright" }).addTo(map);
 
-      // Attribution (required by OSM/CartoDB)
+      // Attribution (required by OSM)
       L.control.attribution({ position: "bottomleft", prefix: false })
         .addTo(map)
-        .addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com">CARTO</a>');
+        .addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>');
 
       mapRef.current = map;
 

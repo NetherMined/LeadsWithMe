@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAuthUser, createAdminClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/auth/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { generateOutreachAssets } from "@/lib/outreach/generator";
 import { trackApiUsage } from "@/lib/usage/track";
 
