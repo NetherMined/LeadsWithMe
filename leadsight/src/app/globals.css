@@ -1,0 +1,381 @@
+@import "tailwindcss";
+
+:root {
+  /* ── Light mode defaults (Untitled UI palette) ── */
+
+  /* Page backgrounds */
+  --bg-deep:     #F9FAFB;
+  --bg-surface:  #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-input:    #FFFFFF;
+
+  /* Sidebar — always dark blue, never flipped by theme */
+  --bg-sidebar:  #1D4ED8;
+
+  /* Borders */
+  --border:       #EAECF0;
+  --border-light: #F2F4F7;
+
+  /* Text */
+  --text-primary:   #101828;
+  --text-secondary: #344054;
+  --text-muted:     #667085;
+
+  /* Accent — blue */
+  --accent:       #2563EB;
+  --accent-dim:   rgba(37, 99, 235, 0.10);
+  --accent-glow:  rgba(37, 99, 235, 0.25);
+  --accent-green: #12B76A;
+  --accent-blue:  #2563EB;
+  --accent-orange:#F79009;
+
+  /* Amber — account sections */
+  --amber:     #F79009;
+  --amber-dim: rgba(247, 144, 9, 0.12);
+
+  /* Semantic */
+  --destructive: #F04438;
+
+  /* Typography */
+  --font-display: 'Geist', system-ui, sans-serif;
+  --font-sans:    'Geist', system-ui, sans-serif;
+  --font-mono:    'Geist Mono', 'Fira Code', monospace;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --header-height: 60px;
+
+  /* Sidebar-specific tokens — always dark regardless of theme */
+  --sidebar-text:         rgba(255, 255, 255, 0.90);
+  --sidebar-text-muted:   rgba(255, 255, 255, 0.45);
+  --sidebar-border:       rgba(255, 255, 255, 0.10);
+  --sidebar-active-bg:    rgba(255, 255, 255, 0.15);
+  --sidebar-hover-bg:     rgba(255, 255, 255, 0.07);
+  --sidebar-active-text:  #FFFFFF;
+  --sidebar-section-text: rgba(255, 255, 255, 0.35);
+
+  /* Legacy compat */
+  --background: var(--bg-surface);
+  --foreground: var(--text-primary);
+}
+
+@theme inline {
+  /* Legacy compat */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Text */
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted:     var(--text-muted);
+
+  /* Backgrounds */
+  --color-bg-deep:     var(--bg-deep);
+  --color-bg-sidebar:  var(--bg-sidebar);
+  --color-bg-surface:  var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-input:    var(--bg-input);
+
+  /* Borders */
+  --color-border-base:  var(--border);
+  --color-border-light: var(--border-light);
+
+  /* Accents */
+  --color-accent:        var(--accent);
+  --color-accent-dim:    var(--accent-dim);
+  --color-accent-glow:   var(--accent-glow);
+  --color-accent-blue:   var(--accent-blue);
+  --color-accent-orange: var(--accent-orange);
+  --color-amber:         var(--amber);
+  --color-amber-dim:     var(--amber-dim);
+  --color-destructive:   var(--destructive);
+
+  /* Fonts */
+  --font-sans:    var(--font-sans);
+  --font-mono:    var(--font-mono);
+  --font-display: var(--font-display);
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* ─── Dark mode via .dark class (ThemeToggle) ────────────────────── */
+
+html.dark {
+  --bg-deep:     #0d0f14;
+  --bg-surface:  #161920;
+  --bg-elevated: #1c1f28;
+  --bg-input:    #1a1d26;
+
+  --border:       rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.04);
+
+  --text-primary:   #f0f2f5;
+  --text-secondary: #9aa3b2;
+  --text-muted:     #5a6378;
+
+  --accent:       #2563eb;
+  --accent-dim:   rgba(37, 99, 235, 0.12);
+  --accent-glow:  rgba(37, 99, 235, 0.30);
+  --accent-green: #34d399;
+  --accent-blue:  #2563eb;
+  --accent-orange:#fb923c;
+
+  --amber:     #fbbf24;
+  --amber-dim: rgba(251, 191, 36, 0.12);
+
+  --destructive: #f87171;
+}
+
+/* Dark mode via system preference */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg-deep:     #0d0f14;
+    --bg-surface:  #161920;
+    --bg-elevated: #1c1f28;
+    --bg-input:    #1a1d26;
+
+    --border:       rgba(255, 255, 255, 0.08);
+    --border-light: rgba(255, 255, 255, 0.04);
+
+    --text-primary:   #f0f2f5;
+    --text-secondary: #9aa3b2;
+    --text-muted:     #5a6378;
+
+    --accent:       #2563eb;
+    --accent-dim:   rgba(37, 99, 235, 0.12);
+    --accent-glow:  rgba(37, 99, 235, 0.30);
+    --accent-green: #34d399;
+    --accent-blue:  #2563eb;
+    --accent-orange:#fb923c;
+
+    --amber:     #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.12);
+
+    --destructive: #f87171;
+  }
+}
+
+/* ─── Animations ────────────────────────────────────────────────── */
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.4; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Custom Utilities ─────────────────────────────────────────── */
+
+/* Micro uppercase section label */
+@utility label-overline {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Standard surface card shell */
+@utility card-surface {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+/* Input-styled inset card */
+@utility card-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Ghost / icon button reset */
+@utility btn-ghost {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+/* Primary CTA button */
+@utility btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+  text-decoration: none;
+  font-family: var(--font-sans);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+/* Subtle secondary button */
+@utility btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease;
+  text-decoration: none;
+  font-family: var(--font-sans);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+/* Dropdown / popover overlay panel */
+@utility panel-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.12), 0 4px 8px rgba(16, 24, 40, 0.06);
+  margin-top: 4px;
+}
+
+/* Full-viewport content area (offsets sidebar + header) */
+@utility viewport-content {
+  position: fixed;
+  top: var(--header-height, 60px);
+  left: var(--sidebar-width, 240px);
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+/* Active sidebar nav item — used inside the dark sidebar */
+@utility nav-active-glow {
+  border-radius: 8px;
+  background: var(--sidebar-active-bg);
+}
+
+/* Pulsing status dot */
+@utility pulse-dot {
+  animation: dotPulse 2.4s ease-in-out infinite;
+}
+
+/* Page header title */
+@utility page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  line-height: 1.2;
+}
+
+/* Page header subtitle */
+@utility page-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 3px;
+}
+
+/* Stat card */
+@utility stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+/* Fade-in for dynamic content */
+@utility animate-fade-in {
+  animation: fadeIn 200ms ease forwards;
+}
+
+/* KPI metric card — larger number emphasis */
+@utility kpi-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+/* Positive trend badge (+%) */
+@utility trend-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: #067647;
+  background: #DCFAE6;
+  border: 1px solid #ABEFC6;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* Negative trend badge (-%) */
+@utility trend-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: #B42318;
+  background: #FEE4E2;
+  border: 1px solid #FECDCA;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* Neutral status badge */
+@utility status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  border-radius: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+/* ─── Map ───────────────────────────────────────────────────────── */
+
+.leaflet-tile-pane {
+  filter: none;
+}
+
+html.dark .leaflet-tile-pane {
+  filter: grayscale(1) invert(1) contrast(0.65);
+}

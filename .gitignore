@@ -1,0 +1,24 @@
+# Local Claude Code settings (contain API keys / credentials)
+**/.claude/settings.local.json
+
+# Env files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies / build output
+**/node_modules/
+**/.next/
+**/out/
+**/build/
+**/coverage/
+*.tsbuildinfo
+
+# Logs and runtime data
+**/logs/
+**/data/uploads/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
