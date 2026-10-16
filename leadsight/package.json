@@ -16,7 +16,7 @@
     "docker:up": "docker compose up -d --build"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.135.0",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-label": "^2.1.2",
     "@radix-ui/react-select": "^2.1.4",
@@ -43,6 +43,7 @@
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
     "tailwind-merge": "^2.6.0",
+    "undici": "^7.25.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

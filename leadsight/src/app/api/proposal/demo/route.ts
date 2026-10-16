@@ -15,12 +15,11 @@ import { and, eq } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth/server";
 import { db } from "@/lib/db/client";
 import { businesses, proposalDemos } from "@/lib/db/schema";
-import { generateCompletion } from "@/lib/ai/client";
 import { generateDemoHtml, type DemoBusiness } from "@/lib/demo/generateDemo";
 import { screenshotDemo } from "@/lib/demo/screenshotDemo";
 import { saveUserFile } from "@/lib/storage/local";
 
-export const maxDuration = 60; // allow time for generation + 2 screenshots
+export const maxDuration = 180; // an 8k-token generation plus 2 screenshots
 
 const Body = z.object({
   businessId: z.string().uuid(),
@@ -69,15 +68,9 @@ export async function POST(req: NextRequest) {
       socials: biz.social_links as Record<string, string> | null,
     };
 
-    // Use the app's AI client (correct model + circuit breaker + Pollinations fallback)
-    const appComplete = async (system: string, user: string) => {
-      const result = await generateCompletion(system, user, { maxTokens: 8000 });
-      return result.text;
-    };
-
     let html: string;
     try {
-      html = await generateDemoHtml(business, proposalMarkdown, appComplete);
+      html = await generateDemoHtml(business, proposalMarkdown);
     } catch (err) {
       console.error("demo generation failed", err);
       return NextResponse.json({ error: "Demo generation failed" }, { status: 502 });

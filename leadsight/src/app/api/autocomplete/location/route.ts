@@ -23,6 +23,9 @@ export interface LocationSuggestion {
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getAuthUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const q = request.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 2) {
     return NextResponse.json({ suggestions: [] });
@@ -60,13 +63,7 @@ export async function GET(request: NextRequest) {
         return { label, full, country, place_id: p.placeId };
       });
 
-    // Track call (fire-and-forget, skip if no auth)
-    try {
-      const user = await getAuthUser();
-      if (user) {
-        trackApiUsage({ userId: user.id, service: "google-places", operation: "autocomplete" });
-      }
-    } catch { /* ignore */ }
+    trackApiUsage({ userId: user.id, service: "google-places", operation: "autocomplete" });
 
     return NextResponse.json({ suggestions });
   } catch {

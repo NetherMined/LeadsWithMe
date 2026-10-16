@@ -8,6 +8,11 @@ import { enrichWebsite } from "@/lib/scraper/website";
 import { enrichFromWebSearch, isBlockedDomain } from "@/lib/scraper/web-search";
 import type { Business, BusinessReview, SocialLinks, WebResult } from "@/types/business";
 import { trackApiUsage } from "@/lib/usage/track";
+import { placePhotoPath } from "@/lib/google/places";
+import { mapWithConcurrency } from "@/lib/utils";
+
+// Up to 50 places, each with a details call plus website and web-search enrichment.
+export const maxDuration = 300;
 
 const searchSchema = z.object({
   query: z.string().min(1),
@@ -147,6 +152,7 @@ export async function POST(request: NextRequest) {
         "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types",
       },
       body: JSON.stringify({ textQuery: searchQuery, maxResultCount: limit }),
+      signal: AbortSignal.timeout(10000),
     });
     const searchData = await searchRes.json();
 
@@ -167,9 +173,9 @@ export async function POST(request: NextRequest) {
 
     const emptySocials: SocialLinks = { facebook: null, instagram: null, linkedin: null, tiktok: null, twitter: null, youtube: null };
 
-    // Fetch Place Details + website enrichment for all results in parallel
-    const enriched = await Promise.all(
-      results.map(async (place) => {
+    // Fetch Place Details + website enrichment, 5 places at a time
+    const enriched = await mapWithConcurrency(
+      results, 5, async (place) => {
         let phone: string | null = null;
         let website: string | null = null;
         const email: string | null = null;
@@ -196,6 +202,7 @@ export async function POST(request: NextRequest) {
               "X-Goog-Api-Key": apiKey,
               "X-Goog-FieldMask": fieldMask,
             },
+            signal: AbortSignal.timeout(10000),
           });
           const d: PlaceDetails = detailsRes.ok ? await detailsRes.json() : {};
           phone   = d.nationalPhoneNumber ?? d.internationalPhoneNumber ?? null;
@@ -227,8 +234,8 @@ export async function POST(request: NextRequest) {
           if (d.photos && d.photos.length > 0) {
             photo_count = d.photos.length;
             photo_references = d.photos.map(p => p.name);
-            photo_primary = `https://places.googleapis.com/v1/${photo_references[0]}/media?maxWidthPx=800&key=${apiKey}`;
-            photos = photo_references.slice(0, 5).map(ref => `https://places.googleapis.com/v1/${ref}/media?maxWidthPx=800&key=${apiKey}`);
+            photo_primary = placePhotoPath(photo_references[0]);
+            photos = photo_references.slice(0, 5).map(placePhotoPath);
           }
 
           trackApiUsage({ userId: user.id, service: "google-places", operation: "place-details" });
@@ -327,7 +334,7 @@ export async function POST(request: NextRequest) {
           socialChannelCount,
           webResults,
         };
-      })
+      }
     );
 
     const businesses: Business[] = [];

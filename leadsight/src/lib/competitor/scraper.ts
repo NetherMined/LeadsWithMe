@@ -1,6 +1,7 @@
 // src/lib/competitor/scraper.ts
 import type { Browser } from "puppeteer-core";
 import type { SiteAnalysis } from "@/types/report";
+import { assertPublicUrl, guardPage, safeFetch } from "@/lib/net/safe-fetch";
 
 const CTA_KEYWORDS = [
   "get started", "book now", "contact us", "call us", "free quote", "get a quote",
@@ -43,6 +44,8 @@ export async function deepScrape(url: string, browser: Browser): Promise<SiteAna
   let loadTimeMs: number | null = null;
 
   try {
+    await assertPublicUrl(url);
+    await guardPage(page);
     const t0 = Date.now();
     await page.goto(url, { waitUntil: "networkidle2", timeout: PAGE_TIMEOUT });
     loadTimeMs = Date.now() - t0;
@@ -240,7 +243,7 @@ export async function deepScrape(url: string, browser: Browser): Promise<SiteAna
     let hasSitemap = false;
     try {
       const origin = new URL(url).origin;
-      const sitemapRes = await fetch(`${origin}/sitemap.xml`, { signal: AbortSignal.timeout(3000) });
+      const sitemapRes = await safeFetch(`${origin}/sitemap.xml`, { signal: AbortSignal.timeout(3000) });
       hasSitemap = sitemapRes.ok;
     } catch { /* ignore */ }
 

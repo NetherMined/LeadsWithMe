@@ -1,6 +1,7 @@
 // src/lib/screenshots/capture.ts
 import type { Browser } from "puppeteer-core";
 import type { ScreenshotResult } from "@/types/report";
+import { assertPublicUrl, guardPage } from "@/lib/net/safe-fetch";
 
 const COOKIE_SELECTORS = [
   "#accept-cookies",
@@ -48,6 +49,8 @@ async function captureOnePage(
   const page = await browser.newPage();
   try {
     await page.setViewport(viewport);
+    await assertPublicUrl(url);
+    await guardPage(page);
     await page.goto(url, { waitUntil: "networkidle2", timeout: PAGE_TIMEOUT_MS });
     await tryDismissCookieBanner(page);
     await new Promise(r => setTimeout(r, 500)); // settle animations
@@ -74,6 +77,8 @@ async function captureOnePage(
 async function discoverInternalPages(browser: Browser, baseUrl: string): Promise<string[]> {
   const page = await browser.newPage();
   try {
+    await assertPublicUrl(baseUrl);
+    await guardPage(page);
     await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: PAGE_TIMEOUT_MS });
     const links = await page.evaluate((base) => {
       const anchors = Array.from(document.querySelectorAll("a[href]"));

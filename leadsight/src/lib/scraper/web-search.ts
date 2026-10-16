@@ -6,6 +6,7 @@ import {
   extractMobiles,
   extractWhatsApp,
 } from "@/lib/scraper/website";
+import { safeFetch } from "@/lib/net/safe-fetch";
 
 export interface WebSearchEnrichment {
   website: string | null;
@@ -100,7 +101,7 @@ function extractSocialLink(url: string): { platform: keyof SocialLinks; url: str
 }
 
 async function fetchHtml(url: string, signal: AbortSignal): Promise<string> {
-  const res = await fetch(url, {
+  const res = await safeFetch(url, {
     signal,
     headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadSightBot/1.0)" },
   });

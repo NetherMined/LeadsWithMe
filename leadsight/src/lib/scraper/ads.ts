@@ -1,3 +1,5 @@
+import { safeFetch } from "@/lib/net/safe-fetch";
+
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
 export interface MetaAdsResult {
@@ -29,7 +31,7 @@ export async function checkGoogleAds(websiteUrl: string): Promise<GoogleAdsResul
   const defaultResult: GoogleAdsResult = { has_google_ads: false, detection_method: "none" };
 
   try {
-    const res = await fetch(websiteUrl, {
+    const res = await safeFetch(websiteUrl, {
       signal: AbortSignal.timeout(10000),
       headers: { "User-Agent": USER_AGENT },
     });

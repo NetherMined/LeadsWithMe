@@ -8,6 +8,8 @@ import { businesses } from "@/lib/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { CompetitorInfo } from "@/types/business";
 
+export const maxDuration = 120;
+
 const schema = z.object({ business_id: z.string().uuid() });
 
 interface PlacesTextResult {
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
         "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount",
       },
       body: JSON.stringify({ textQuery: searchQuery, maxResultCount: 10 }),
+      signal: AbortSignal.timeout(10000),
     });
     const searchData = await searchRes.json() as { places?: PlacesTextResult[]; error?: { message: string } };
 
@@ -80,6 +83,7 @@ export async function POST(request: NextRequest) {
               "X-Goog-Api-Key": apiKey,
               "X-Goog-FieldMask": "nationalPhoneNumber,internationalPhoneNumber,websiteUri",
             },
+            signal: AbortSignal.timeout(10000),
           });
           const d: PlaceDetailsResult = detailsRes.ok ? await detailsRes.json() : {};
           phone = d.nationalPhoneNumber ?? d.internationalPhoneNumber ?? null;

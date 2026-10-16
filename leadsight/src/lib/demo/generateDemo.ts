@@ -6,13 +6,11 @@
  * external image hosts) so it renders deterministically and can be screenshotted
  * via Puppeteer's page.setContent() WITHOUT serving it on localhost.
  *
- * INTEGRATION: You already have an AI layer at lib/ai/client.ts (Claude Haiku +
- * Pollinations fallback + circuit breaker). Prefer reusing it: import your
- * completion helper and pass it as the `complete` arg to generateDemoHtml().
- * The bundled callModel() below exists only so this file runs standalone.
+ * The model call goes through lib/ai/client.ts (configured model, circuit
+ * breaker, Pollinations fallback) unless a `complete` function is passed in.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { generateCompletion } from "@/lib/ai/client";
 
 export interface DemoBusiness {
   name: string;
@@ -215,43 +213,9 @@ export function extractHtml(raw: string): string {
   return html;
 }
 
-// --- Bundled fallback model call. Prefer reusing lib/ai/client.ts instead. ---
 async function callModel(system: string, user: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey) {
-    try {
-      const anthropic = new Anthropic({ apiKey });
-      const res = await anthropic.messages.create({
-        // Match whatever model your lib/ai/client.ts uses.
-        model: process.env.AI_MODEL ?? "claude-3-5-haiku-20241022",
-        max_tokens: 8000,
-        system,
-        messages: [{ role: "user", content: user }],
-      });
-      const text = res.content
-        .map((b) => (b.type === "text" ? b.text : ""))
-        .join("");
-      if (text.trim()) return text;
-    } catch (err) {
-      console.error("Anthropic demo generation failed; falling back to Pollinations", err);
-    }
-  }
-
-  // Pollinations OpenAI-compatible fallback (free, community-hosted).
-  const res = await fetch("https://text.pollinations.ai/openai", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "openai-large",
-      max_tokens: 8000,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
-  });
-  const data = await res.json();
-  return data?.choices?.[0]?.message?.content ?? "";
+  const result = await generateCompletion(system, user, { maxTokens: 8000 });
+  return result.text;
 }
 
 export async function generateDemoHtml(

@@ -5,6 +5,7 @@
  */
 import * as cheerio from "cheerio";
 import type { SocialLinks } from "@/types/business";
+import { safeFetch } from "@/lib/net/safe-fetch";
 
 export interface EmailResult {
   email: string;
@@ -69,7 +70,7 @@ function isValidEmail(email: string): boolean {
 
 async function fetchHtml(url: string, timeoutMs = 8000): Promise<string | null> {
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
       headers: {
         "User-Agent": UA,

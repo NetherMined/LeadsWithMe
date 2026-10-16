@@ -9,6 +9,8 @@ import { generateCompletion } from "@/lib/ai/client";
 import { parsePlanResponse } from "@/lib/ai/parser";
 import { trackApiUsage } from "@/lib/usage/track";
 
+export const maxDuration = 120;
+
 const schema = z.object({ business_id: z.string().uuid() });
 
 export async function POST(request: NextRequest) {

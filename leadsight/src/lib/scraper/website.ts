@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { SocialLinks } from "@/types/business";
 import type { TechStackDetailed } from "@/types/audit";
+import { safeFetch } from "@/lib/net/safe-fetch";
 
 export interface WebsiteEnrichment {
   socialLinks: SocialLinks;
@@ -172,7 +173,7 @@ export async function enrichWebsite(url: string): Promise<WebsiteEnrichment> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -264,36 +265,44 @@ export interface PageSpeedResult {
   bestPracticesScore: number;
   firstContentfulPaint: number;
   largestContentfulPaint: number;
+  /** Set when PageSpeed could not be run; the scores above are then zero placeholders. */
+  error?: string;
 }
 
 export async function runPageSpeedAudit(url: string): Promise<PageSpeedResult> {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY;
+  const apiKey = process.env.PAGESPEED_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
   const defaultResult: PageSpeedResult = {
     performanceScore: 0, seoScore: 0, accessibilityScore: 0,
     bestPracticesScore: 0, firstContentfulPaint: 0, largestContentfulPaint: 0,
   };
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
     const endpoint =
       `https://www.googleapis.com/pagespeedonline/v5/runPagespeed` +
       `?url=${encodeURIComponent(url)}` +
       `&category=PERFORMANCE&category=SEO&category=ACCESSIBILITY&category=BEST_PRACTICES` +
-      `&key=${apiKey}` +
+      (apiKey ? `&key=${encodeURIComponent(apiKey)}` : "") +
       `&strategy=mobile`;
 
-    let res: Response;
-    try {
-      res = await fetch(endpoint, { signal: controller.signal });
-    } finally {
-      clearTimeout(timeout);
-    }
+    // Lighthouse runs on Google's side and regularly takes 20-40s for slow sites.
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(45000) });
 
     if (!res.ok) {
-      console.error(`[PageSpeed] HTTP ${res.status} for ${url}`);
-      return defaultResult;
+      const body = await res.json().catch(() => null) as
+        { error?: { message?: string; details?: { reason?: string }[] } } | null;
+      const reason = body?.error?.details?.find((d) => d.reason)?.reason;
+      let error: string;
+      if (res.status === 403) {
+        error = reason === "API_KEY_SERVICE_BLOCKED"
+          ? "PageSpeed Insights API is blocked for this API key. Enable it on the key's API restrictions or set PAGESPEED_API_KEY."
+          : `PageSpeed access denied (403${reason ? `, ${reason}` : ""}). Check PAGESPEED_API_KEY.`;
+      } else if (res.status === 429) {
+        error = "PageSpeed quota exceeded (429). Set PAGESPEED_API_KEY to a key with PageSpeed Insights enabled.";
+      } else {
+        error = `PageSpeed request failed (HTTP ${res.status})`;
+      }
+      console.error(`[PageSpeed] ${error} — ${url}`);
+      return { ...defaultResult, error };
     }
 
     const data = await res.json() as {
@@ -324,7 +333,8 @@ export async function runPageSpeedAudit(url: string): Promise<PageSpeedResult> {
     };
   } catch (err) {
     console.error(`[PageSpeed] Audit failed for ${url}:`, err);
-    return defaultResult;
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
+    return { ...defaultResult, error: timedOut ? "PageSpeed timed out after 45s" : "PageSpeed request failed" };
   }
 }
 
@@ -374,8 +384,8 @@ export async function runSeoScan(url: string, html: string): Promise<SeoScanResu
   try {
     const baseUrl = new URL(url).origin;
     const [sitemapRes, robotsRes] = await Promise.all([
-      fetch(`${baseUrl}/sitemap.xml`, { signal: AbortSignal.timeout(3000) }),
-      fetch(`${baseUrl}/robots.txt`, { signal: AbortSignal.timeout(3000) }),
+      safeFetch(`${baseUrl}/sitemap.xml`, { signal: AbortSignal.timeout(3000) }),
+      safeFetch(`${baseUrl}/robots.txt`, { signal: AbortSignal.timeout(3000) }),
     ]);
     hasSitemap = sitemapRes.ok;
     hasRobots = robotsRes.ok;
@@ -604,7 +614,7 @@ export async function checkContentFreshness(url: string, html: string): Promise<
 
     let res: Response;
     try {
-      res = await fetch(blogUrl, {
+      res = await safeFetch(blogUrl, {
         signal: controller.signal,
         headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadSightBot/1.0)" },
       });

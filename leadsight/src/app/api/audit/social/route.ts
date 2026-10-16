@@ -5,6 +5,8 @@ import { buildChannelsFromLinks, calculateSocialScores } from "@/lib/scraper/soc
 import { getBusinessById, upsertSocialAudit } from "@/lib/db/queries";
 import type { Business } from "@/types/business";
 
+export const maxDuration = 60;
+
 const schema = z.object({ business_id: z.string().uuid() });
 
 export async function POST(request: NextRequest) {

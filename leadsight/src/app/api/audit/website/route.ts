@@ -5,6 +5,9 @@ import { runPageSpeedAudit, runSeoScan, detectTechStack, checkContentFreshness, 
 import { searchExternalDeals } from "@/lib/scraper/deals";
 import { trackApiUsage } from "@/lib/usage/track";
 import { getBusinessById, upsertWebsiteAudit } from "@/lib/db/queries";
+import { safeFetch } from "@/lib/net/safe-fetch";
+
+export const maxDuration = 60;
 
 const schema = z.object({ business_id: z.string().uuid() });
 
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest) {
     let html = "";
     let headers = new Headers();
     try {
-      const res = await fetch(url, {
+      const res = await safeFetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadSightBot/1.0)" },
         signal: AbortSignal.timeout(10000),
       });
@@ -97,7 +100,9 @@ export async function POST(request: NextRequest) {
 
     const audit = await upsertWebsiteAudit(auditData);
 
-    return NextResponse.json({ audit, seoIssues: seoScan.issues });
+    const warnings = pageSpeed.error ? [pageSpeed.error] : [];
+
+    return NextResponse.json({ audit, seoIssues: seoScan.issues, warnings });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });

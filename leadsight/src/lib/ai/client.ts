@@ -1,4 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, { APIError } from "@anthropic-ai/sdk";
+
+export const DEFAULT_AI_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_FALLBACK_MODEL = "openai/gpt-5.4-mini";
+const FALLBACK_URL = "https://gen.pollinations.ai/v1/chat/completions";
+const ANTHROPIC_TIMEOUT_MS = 120_000;
+const FALLBACK_TIMEOUT_MS = 120_000;
 
 let anthropicClient: Anthropic | null = null;
 // Circuit breaker: skip Anthropic for 5 min after a billing error
@@ -6,9 +12,20 @@ let anthropicBillingErrorUntil = 0;
 
 function getAnthropicClient(): Anthropic {
   if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    anthropicClient = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      timeout: ANTHROPIC_TIMEOUT_MS,
+      maxRetries: 1,
+    });
   }
   return anthropicClient;
+}
+
+/** Out of credit / plan limits. Older API versions report low credit as a 400 invalid_request_error. */
+function isBillingError(err: unknown): err is APIError {
+  if (!(err instanceof APIError)) return false;
+  if (err.status === 402 || err.type === "billing_error") return true;
+  return err.status === 400 && err.type === "invalid_request_error" && /credit balance/i.test(err.message);
 }
 
 export interface CompletionResult {
@@ -35,7 +52,7 @@ export async function generateCompletion(
   // Try Claude first (skip if circuit breaker is open)
   if (anthropicKey && Date.now() > anthropicBillingErrorUntil) {
     try {
-      const model = options?.model ?? "claude-haiku-4-5-20251001";
+      const model = options?.model ?? process.env.AI_MODEL ?? DEFAULT_AI_MODEL;
       const client = getAnthropicClient();
       const message = await client.messages.create({
         model,
@@ -43,27 +60,24 @@ export async function generateCompletion(
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
       });
-      const block = message.content[0];
-      if (block.type !== "text") throw new Error("Unexpected response from Claude");
+      const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+      if (!text) throw new Error("Unexpected response from Claude");
       return {
-        text: block.text,
+        text,
         tokensInput: message.usage.input_tokens,
         tokensOutput: message.usage.output_tokens,
         model,
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isBillingError = msg.includes("credit balance") || msg.includes("quota") || msg.includes("insufficient");
-      if (!pollinationsKey || !isBillingError) throw err;
-      anthropicError = err instanceof Error ? err : new Error(msg);
+      if (!pollinationsKey || !isBillingError(err)) throw err;
+      anthropicError = err;
       anthropicBillingErrorUntil = Date.now() + 5 * 60 * 1000; // skip for 5 min
-      console.warn("[AI] Anthropic billing error — circuit open for 5 min, falling back to Pollinations:", msg);
+      console.warn("[AI] Anthropic billing error — circuit open for 5 min, falling back to Pollinations:", err.message);
     }
   }
 
   // Pollinations fallback — OpenAI-compatible endpoint, respects Retry-After, up to 2 retries
-  const pollinationsModel = "openai-large";
-  const pollinationsUrl = "https://text.pollinations.ai/openai";
+  const pollinationsModel = process.env.POLLINATIONS_MODEL ?? DEFAULT_FALLBACK_MODEL;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (pollinationsKey) headers["Authorization"] = `Bearer ${pollinationsKey}`;
 
@@ -74,11 +88,10 @@ export async function generateCompletion(
       { role: "user", content: userPrompt },
     ],
     max_tokens: options?.maxTokens ?? 4000,
-    private: true,
   });
 
   const callPollinations = () =>
-    fetch(pollinationsUrl, { method: "POST", headers, body });
+    fetch(FALLBACK_URL, { method: "POST", headers, body, signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS) });
 
   let res = await callPollinations();
 
@@ -98,11 +111,12 @@ export async function generateCompletion(
       }
       throw new Error("Pollinations rate limit exceeded. Try again in a minute.");
     }
-    throw new Error(`Pollinations API error: ${res.status} — ${detail}`);
+    throw new Error(`Pollinations API error: ${res.status} — ${detail.slice(0, 500)}`);
   }
 
   const data = await res.json();
   const text = data.choices?.[0]?.message?.content ?? "";
+  if (!text) throw new Error("Pollinations returned an empty completion");
   const tokensInput = data.usage?.prompt_tokens as number | undefined;
   const tokensOutput = data.usage?.completion_tokens as number | undefined;
   return { text, tokensInput, tokensOutput, model: `pollinations/${pollinationsModel}` };

@@ -1,11 +1,12 @@
 import type { SocialChannelAudit } from "@/types/audit";
 import type { SocialLinks } from "@/types/business";
+import { safeFetch } from "@/lib/net/safe-fetch";
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 async function fetchWithTimeout(url: string, timeoutMs = 10000): Promise<{ ok: boolean; html: string; status: number }> {
   try {
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       signal: AbortSignal.timeout(timeoutMs),
       headers: { "User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9" },
     });

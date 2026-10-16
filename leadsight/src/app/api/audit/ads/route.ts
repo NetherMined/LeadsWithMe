@@ -5,6 +5,8 @@ import { checkMetaAds, checkGoogleAds, estimateDomainAuthority } from "@/lib/scr
 import { getBusinessById, upsertAdsAudit } from "@/lib/db/queries";
 import type { Business } from "@/types/business";
 
+export const maxDuration = 60;
+
 const schema = z.object({ business_id: z.string().uuid() });
 
 export async function POST(request: NextRequest) {

@@ -9,6 +9,8 @@ import type { EmailResult } from "@/lib/scraper/emails";
 import type { Business } from "@/types/business";
 import { trackApiUsage } from "@/lib/usage/track";
 
+export const maxDuration = 120;
+
 const schema = z.object({ business_id: z.string().uuid() });
 
 export async function POST(request: NextRequest) {
@@ -38,9 +40,12 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.GOOGLE_PLACES_API_KEY;
     if (!websiteUrl && apiKey && b.place_id) {
       try {
-        const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${b.place_id}&fields=website&key=${apiKey}`;
-        const detailsData = await fetch(detailsUrl).then(r => r.json()) as { result?: { website?: string } };
-        websiteUrl = detailsData.result?.website ?? null;
+        const detailsRes = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(b.place_id)}`, {
+          headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "websiteUri" },
+          signal: AbortSignal.timeout(10000),
+        });
+        const details = (detailsRes.ok ? await detailsRes.json() : {}) as { websiteUri?: string };
+        websiteUrl = details.websiteUri ?? null;
         trackApiUsage({ userId: user.id, service: "google-places", operation: "place-details" });
       } catch { /* ignore */ }
 
