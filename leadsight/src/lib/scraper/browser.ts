@@ -22,12 +22,20 @@ function findLocalChrome(): string | undefined {
   return LOCAL_CHROME_PATHS.find(p => p && existsSync(p));
 }
 
+const DESKTOP_CHROME_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"];
+
 export async function launchBrowser(): Promise<Browser> {
   let executablePath: string;
   let args: string[];
 
-  // @sparticuz/chromium only works on Linux (serverless). On Windows/Mac use local Chrome.
-  if (!IS_WINDOWS) {
+  // An explicit binary wins (the Docker image sets /usr/bin/chromium). It is a regular
+  // Chrome/Chromium build, so it gets desktop args, not @sparticuz's serverless flags.
+  const configured = process.env.CHROME_EXECUTABLE_PATH;
+  if (configured) {
+    executablePath = configured;
+    args = DESKTOP_CHROME_ARGS;
+  } else if (!IS_WINDOWS) {
+    // @sparticuz/chromium only works on Linux (serverless). On Windows/Mac use local Chrome.
     try {
       const chromium = await import("@sparticuz/chromium");
       executablePath = await chromium.default.executablePath();
@@ -36,13 +44,13 @@ export async function launchBrowser(): Promise<Browser> {
       const local = findLocalChrome();
       if (!local) throw new Error("No Chrome executable found.");
       executablePath = local;
-      args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"];
+      args = DESKTOP_CHROME_ARGS;
     }
   } else {
     const local = findLocalChrome();
     if (!local) throw new Error("Chrome not found. Install Google Chrome to use PDF export.");
     executablePath = local;
-    args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"];
+    args = DESKTOP_CHROME_ARGS;
   }
 
   return puppeteer.launch({

@@ -1,28 +1,19 @@
+import { redirect } from "next/navigation";
+import { getAuthUser } from "@/lib/auth/server";
+import { getPipelineForUser } from "@/lib/db/queries";
 import { PipelineKanban } from "@/components/outreach/PipelineKanban";
 import { FollowupReminder } from "@/components/outreach/FollowupReminder";
 import type { OutreachPipelineEntry } from "@/types/outreach";
 
 export default async function OutreachPage() {
-  let pipelineData: OutreachPipelineEntry[] = [];
-  let wonCount = 0;
-  let activeCount = 0;
+  const user = await getAuthUser();
+  if (!user) redirect("/login");
 
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const response = await fetch(`${baseUrl}/api/outreach/pipeline`, {
-      cache: "no-store",
-    });
-
-    if (response.ok) {
-      pipelineData = await response.json();
-      wonCount = pipelineData.filter((entry) => entry.status === "won").length;
-      activeCount = pipelineData.filter(
-        (entry) => entry.status === "contacted" || entry.status === "replied" || entry.status === "negotiating"
-      ).length;
-    }
-  } catch (error) {
-    console.error("Error fetching pipeline data:", error);
-  }
+  const pipelineData: OutreachPipelineEntry[] = await getPipelineForUser(user.id);
+  const wonCount = pipelineData.filter((entry) => entry.status === "won").length;
+  const activeCount = pipelineData.filter(
+    (entry) => entry.status === "contacted" || entry.status === "replied" || entry.status === "negotiating"
+  ).length;
 
   const winRate = pipelineData.length > 0
     ? ((wonCount / pipelineData.length) * 100).toFixed(0)

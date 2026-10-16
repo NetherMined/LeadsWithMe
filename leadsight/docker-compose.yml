@@ -17,5 +17,44 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: .
+      target: migrate
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-leadsight}:${POSTGRES_PASSWORD:-leadsight}@db:5432/${POSTGRES_DB:-leadsight}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-leadsight}:${POSTGRES_PASSWORD:-leadsight}@db:5432/${POSTGRES_DB:-leadsight}
+      UPLOAD_DIR: /data/uploads
+    ports:
+      # Host 3001: 3000 is taken by another local stack, and the Google OAuth redirect is registered on 3001.
+      - "${APP_HOST_PORT:-3001}:3000"
+    volumes:
+      - uploads:/data/uploads
+      - logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   pgdata:
+  uploads:
+  logs:

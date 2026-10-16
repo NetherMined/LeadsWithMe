@@ -12,7 +12,8 @@
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed-dev.ts",
     "db:studio": "drizzle-kit studio",
-    "db:up": "docker compose up -d db"
+    "db:up": "docker compose up -d db",
+    "docker:up": "docker compose up -d --build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

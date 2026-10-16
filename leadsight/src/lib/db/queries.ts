@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { db } from "./client";
 import {
   businesses,
@@ -9,12 +9,14 @@ import {
   scores,
   marketingPlans,
   exports,
+  outreachPipeline,
 } from "./schema";
 import type { Business } from "@/types/business";
 import type { WebsiteAudit, SocialAudit, AdsAudit } from "@/types/audit";
 import type { DigitalPresenceScore } from "@/types/score";
 import type { MarketingPlan } from "@/types/plan";
 import type { ExportRecord } from "@/types/export";
+import type { OutreachPipelineEntry } from "@/types/outreach";
 
 // Insert types (omit server-generated fields)
 export type InsertBusiness = Omit<Business, "id" | "created_at" | "updated_at">;
@@ -153,4 +155,30 @@ export async function getFullBusinessProfile(
     score: (score as unknown as DigitalPresenceScore) ?? null,
     plan: (plan as unknown as MarketingPlan) ?? null,
   };
+}
+
+// --- Outreach pipeline ---
+
+/** The user's pipeline entries with a `businesses` summary, most recently contacted first. */
+export async function getPipelineForUser(userId: string, status?: string | null): Promise<OutreachPipelineEntry[]> {
+  const rows = await db
+    .select({
+      ...getTableColumns(outreachPipeline),
+      businesses: {
+        name: businesses.name,
+        category: businesses.category,
+        address_city: businesses.address_city,
+        rating: businesses.rating,
+        review_count: businesses.review_count,
+      },
+    })
+    .from(outreachPipeline)
+    .innerJoin(businesses, eq(businesses.id, outreachPipeline.business_id))
+    .where(
+      status
+        ? and(eq(outreachPipeline.user_id, userId), eq(outreachPipeline.status, status))
+        : eq(outreachPipeline.user_id, userId)
+    )
+    .orderBy(sql`${outreachPipeline.last_contact_at} desc nulls last`);
+  return rows as unknown as OutreachPipelineEntry[];
 }

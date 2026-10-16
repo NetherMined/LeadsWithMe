@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { and, eq, getTableColumns, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getAuthUser } from "@/lib/auth/server";
 import { db } from "@/lib/db/client";
-import { businesses, outreachPipeline } from "@/lib/db/schema";
-import { getBusinessById } from "@/lib/db/queries";
+import { outreachPipeline } from "@/lib/db/schema";
+import { getBusinessById, getPipelineForUser } from "@/lib/db/queries";
 
 const STATUSES = ["not_contacted", "contacted", "replied", "negotiating", "won", "lost", "ghosted"] as const;
 const CHANNELS = ["email", "linkedin", "both"] as const;
@@ -35,25 +35,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const statusFilter = searchParams.get("status");
 
-    const data = await db
-      .select({
-        ...getTableColumns(outreachPipeline),
-        businesses: {
-          name: businesses.name,
-          category: businesses.category,
-          address_city: businesses.address_city,
-          rating: businesses.rating,
-          review_count: businesses.review_count,
-        },
-      })
-      .from(outreachPipeline)
-      .innerJoin(businesses, eq(businesses.id, outreachPipeline.business_id))
-      .where(
-        statusFilter
-          ? and(eq(outreachPipeline.user_id, user.id), eq(outreachPipeline.status, statusFilter))
-          : eq(outreachPipeline.user_id, user.id)
-      )
-      .orderBy(sql`${outreachPipeline.last_contact_at} desc nulls last`);
+    const data = await getPipelineForUser(user.id, statusFilter);
 
     return NextResponse.json(data);
   } catch (error) {
