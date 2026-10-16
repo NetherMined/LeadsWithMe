@@ -64,14 +64,14 @@ export async function GET() {
     const FREE_TIER_MONTHLY: Record<string, number | null> = {
       "google-places": 200,
       "pagespeed":     null,
-      "anthropic":     null,
+      "opencode":      null,
       "pollinations":  null,
     };
 
     const SERVICE_COLORS: Record<string, string> = {
       "google-places": "#4285F4",
       "pagespeed":     "#34A853",
-      "anthropic":     "#D97706",
+      "opencode":      "#0EA5E9",
       "pollinations":  "#EC4899",
     };
 

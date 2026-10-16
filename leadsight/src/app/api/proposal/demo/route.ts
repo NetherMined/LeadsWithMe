@@ -19,7 +19,7 @@ import { generateDemoHtml, type DemoBusiness } from "@/lib/demo/generateDemo";
 import { screenshotDemo } from "@/lib/demo/screenshotDemo";
 import { saveUserFile } from "@/lib/storage/local";
 
-export const maxDuration = 180; // an 8k-token generation plus 2 screenshots
+export const maxDuration = 300; // a long Muse Spark generation plus 2 screenshots
 
 const Body = z.object({
   businessId: z.string().uuid(),

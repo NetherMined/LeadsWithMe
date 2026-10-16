@@ -41,7 +41,7 @@ This project uses **Next.js 16.2.3**, which has breaking changes from older vers
 - **Better Auth** — Google sign-in, database sessions, Google API tokens in the `accounts` table
 - **Local file storage** under `UPLOAD_DIR`, served by `/api/files/[...path]`
 - **Google APIs** — Places v1 (New), PageSpeed Insights, Sheets, Docs, Drive
-- **Anthropic Claude** (default `claude-haiku-4-5-20251001`) — primary AI; **Pollinations** (`gen.pollinations.ai/v1`) as billing-error fallback
+- **Muse Spark** (`opencode/muse-spark-1.3-contributor-free`) via the local **OpenCode CLI** background service — primary AI; **Pollinations** (`gen.pollinations.ai/v1`) as fallback
 - **Puppeteer Core** — Debian Chromium in Docker (`CHROME_EXECUTABLE_PATH`), local Chrome on Windows/macOS, `@sparticuz/chromium` on serverless Linux
 - **Leaflet** — map on search page, loaded client-only via `next/dynamic` (ssr: false)
 - **Tailwind CSS v4** + shadcn/ui + heavy use of inline styles with CSS variables
@@ -67,7 +67,7 @@ This project uses **Next.js 16.2.3**, which has breaking changes from older vers
 | `lib/db/` | `client.ts` (Drizzle `db`), `schema.ts` (all tables), `queries.ts` (user-scoped queries) |
 | `lib/storage/local.ts` | Save/read user files under `UPLOAD_DIR` with path-traversal protection |
 | `lib/net/safe-fetch.ts` | `safeFetch()`, `assertPublicUrl()`, `guardPage()` — SSRF guard |
-| `lib/ai/` | `client.ts` (Claude + Pollinations), `prompts.ts`, `parser.ts` |
+| `lib/ai/` | `client.ts` (`generateCompletion`), `opencode.ts` (OpenCode bridge), `prompts.ts`, `parser.ts` |
 | `lib/scraper/` | `website.ts`, `social.ts`, `ads.ts`, `deals.ts`, `web-search.ts`, `emails.ts`, `browser.ts` |
 | `lib/competitor/`, `lib/screenshots/`, `lib/pdf/` | Competitor deep-scrape, page screenshots, PDF report |
 | `lib/demo/` | AI demo-site generation + screenshots |
@@ -120,7 +120,7 @@ Path alias `@/*` maps to `./src/*`.
 ### Data Flow
 1. Search page: `POST /api/search` → Google Places API v1 → per-place Detail fetch + website enrichment + web search enrichment → upsert to `businesses` (unique on `user_id, place_id`)
 2. Lead detail: `POST /api/audit/*` → upsert audit tables → `POST /api/score` → `scores` table
-3. AI plan: `POST /api/plan` → `getFullBusinessProfile(id, userId)` → `buildPlanPrompt()` → Claude (fallback: Pollinations) → `marketing_plans` table
+3. AI plan: `POST /api/plan` → `getFullBusinessProfile(id, userId)` → `buildPlanPrompt()` → Muse Spark via OpenCode (fallback: Pollinations) → `marketing_plans` table
 4. Export: fetch business + audit + score + plan → write to Sheets/Docs/Drive with the user's Google token, or render a PDF
 
 ### Auth Pattern
@@ -155,9 +155,15 @@ Google OAuth redirect URI: `http://localhost:3001/api/auth/callback/google`. Sig
 - Every external fetch needs `signal: AbortSignal.timeout(ms)`. Long routes export `maxDuration`.
 - Never put API keys in URLs that reach the client or the database. Places photos go through `/api/places/photo` (`placePhotoPath()` in `lib/google/places.ts`).
 
-### AI Client (`lib/ai/client.ts`)
+### AI Client (`lib/ai/client.ts`, `lib/ai/opencode.ts`)
 
-`generateCompletion(systemPrompt, userPrompt, options?)` calls Claude (`options.model` → `AI_MODEL` → `claude-haiku-4-5-20251001`). On a billing error (HTTP 402 / `billing_error`, or the legacy 400 "credit balance" error) it opens a 5-minute circuit breaker and falls back to Pollinations (`POLLINATIONS_MODEL`, default `openai/gpt-5.4-mini`). Other errors are thrown. All AI features, including demo generation, go through this function.
+`generateCompletion(systemPrompt, userPrompt, options?)` is the only AI entry point; every feature, including demo generation, goes through it.
+
+1. **Muse Spark via OpenCode** (`OPENCODE_MODEL`, default `opencode/muse-spark-1.3-contributor-free`). OpenCode's free models only answer requests made by OpenCode, so `openCodeComplete()` drives the user's local `opencode service` (v2 `/api` routes, HTTP basic auth with `OPENCODE_SERVER_PASSWORD`). Each completion is a throwaway session: create → prompt → poll → read the last assistant text → delete.
+2. **Tool safety.** The session is an agent with tools, and prompts contain scraped website text. The session sets every permission to `ask`, and the bridge **rejects every permission request**, so a prompt injection can ask for a tool but nothing ever runs. Do not change this to `deny` (OpenCode's free tier refuses requests without tools) or to `allow`.
+3. **Fallback.** If OpenCode is unreachable, refuses, errors or times out (240s), it falls back to Pollinations (`POLLINATIONS_MODEL`, default `openai/gpt-5.4-mini`). An unreachable or refusing service opens a 2-minute circuit breaker.
+
+The OpenCode `/api` routes are undocumented and were verified against opencode 2.0.29; re-test `lib/ai/opencode.ts` after upgrading OpenCode. The free contributor tier lets Meta train on prompts and completions.
 
 ### Styling Convention
 
@@ -204,10 +210,13 @@ GOOGLE_CLIENT_SECRET
 GOOGLE_PLACES_API_KEY
 PAGESPEED_API_KEY           # Optional — falls back to GOOGLE_PLACES_API_KEY (PageSpeed API must be enabled on it)
 
-# AI
-ANTHROPIC_API_KEY
-AI_MODEL                    # Optional — default claude-haiku-4-5-20251001
-POLLINATIONS_API_KEY        # Optional — enables the fallback
+# AI (Muse Spark via the local OpenCode service; see README for the one-time setup)
+OPENCODE_SERVER_PASSWORD    # Same value as `opencode service set password …`
+OPENCODE_URL                # Optional — default http://127.0.0.1:4096 (compose: host.docker.internal:4096)
+OPENCODE_SERVER_USERNAME    # Optional — default opencode
+OPENCODE_MODEL              # Optional — default opencode/muse-spark-1.3-contributor-free
+OPENCODE_DIRECTORY          # Optional — empty host folder the OpenCode sessions run in
+POLLINATIONS_API_KEY        # Fallback provider
 POLLINATIONS_MODEL          # Optional — default openai/gpt-5.4-mini
 
 # Optional services and paths

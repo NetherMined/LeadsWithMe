@@ -5,7 +5,7 @@ import { generateCompletion } from "@/lib/ai/client";
 import { getBusinessById } from "@/lib/db/queries";
 import type { Business, SocialLinks, WebResult } from "@/types/business";
 
-export const maxDuration = 120;
+export const maxDuration = 240;
 
 const schema = z.object({ business_id: z.string().uuid() });
 

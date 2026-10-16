@@ -245,7 +245,7 @@ export const marketingPlans = pgTable(
     long_term: jsonArray("long_term"),
     outreach_email_draft: text("outreach_email_draft").notNull().default(""),
     generated_at: ts("generated_at").notNull().defaultNow(),
-    model_used: text("model_used").notNull().default("claude-haiku-4-5"),
+    model_used: text("model_used").notNull().default("opencode/muse-spark-1.3-contributor-free"),
   },
   (t) => [index("idx_marketing_plans_user_id").on(t.user_id)]
 );

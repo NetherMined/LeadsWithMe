@@ -1,32 +1,11 @@
-import Anthropic, { APIError } from "@anthropic-ai/sdk";
+import { isOpenCodeConfigured, openCodeComplete, OpenCodeError } from "./opencode";
 
-export const DEFAULT_AI_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_FALLBACK_MODEL = "openai/gpt-5.4-mini";
 const FALLBACK_URL = "https://gen.pollinations.ai/v1/chat/completions";
-const ANTHROPIC_TIMEOUT_MS = 120_000;
 const FALLBACK_TIMEOUT_MS = 120_000;
 
-let anthropicClient: Anthropic | null = null;
-// Circuit breaker: skip Anthropic for 5 min after a billing error
-let anthropicBillingErrorUntil = 0;
-
-function getAnthropicClient(): Anthropic {
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      timeout: ANTHROPIC_TIMEOUT_MS,
-      maxRetries: 1,
-    });
-  }
-  return anthropicClient;
-}
-
-/** Out of credit / plan limits. Older API versions report low credit as a 400 invalid_request_error. */
-function isBillingError(err: unknown): err is APIError {
-  if (!(err instanceof APIError)) return false;
-  if (err.status === 402 || err.type === "billing_error") return true;
-  return err.status === 400 && err.type === "invalid_request_error" && /credit balance/i.test(err.message);
-}
+// Circuit breaker: skip OpenCode for 2 min after it is unreachable or refuses the request
+let openCodeUnavailableUntil = 0;
 
 export interface CompletionResult {
   text: string;
@@ -35,44 +14,35 @@ export interface CompletionResult {
   model: string;
 }
 
+/** Usage-tracking service name for a completion's model. */
+export function aiService(model: string): "opencode" | "pollinations" {
+  return model.startsWith("pollinations/") ? "pollinations" : "opencode";
+}
+
 export async function generateCompletion(
   systemPrompt: string,
   userPrompt: string,
-  options?: { model?: string; maxTokens?: number }
+  options?: { maxTokens?: number }
 ): Promise<CompletionResult> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const pollinationsKey = process.env.POLLINATIONS_API_KEY;
 
-  if (!anthropicKey && !pollinationsKey) {
-    throw new Error("No AI API key configured. Set ANTHROPIC_API_KEY or POLLINATIONS_API_KEY.");
+  if (!isOpenCodeConfigured() && !pollinationsKey) {
+    throw new Error("No AI provider configured. Set OPENCODE_SERVER_PASSWORD (local OpenCode) or POLLINATIONS_API_KEY.");
   }
 
-  let anthropicError: Error | null = null;
+  let openCodeError: Error | null = null;
 
-  // Try Claude first (skip if circuit breaker is open)
-  if (anthropicKey && Date.now() > anthropicBillingErrorUntil) {
+  // Muse Spark via the local OpenCode service first (skip if circuit breaker is open)
+  if (isOpenCodeConfigured() && Date.now() > openCodeUnavailableUntil) {
     try {
-      const model = options?.model ?? process.env.AI_MODEL ?? DEFAULT_AI_MODEL;
-      const client = getAnthropicClient();
-      const message = await client.messages.create({
-        model,
-        max_tokens: options?.maxTokens ?? 4000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      });
-      const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-      if (!text) throw new Error("Unexpected response from Claude");
-      return {
-        text,
-        tokensInput: message.usage.input_tokens,
-        tokensOutput: message.usage.output_tokens,
-        model,
-      };
+      return await openCodeComplete(systemPrompt, userPrompt);
     } catch (err) {
-      if (!pollinationsKey || !isBillingError(err)) throw err;
-      anthropicError = err;
-      anthropicBillingErrorUntil = Date.now() + 5 * 60 * 1000; // skip for 5 min
-      console.warn("[AI] Anthropic billing error — circuit open for 5 min, falling back to Pollinations:", err.message);
+      openCodeError = err instanceof Error ? err : new Error(String(err));
+      if (err instanceof OpenCodeError && err.unavailable) {
+        openCodeUnavailableUntil = Date.now() + 2 * 60 * 1000;
+      }
+      if (!pollinationsKey) throw openCodeError;
+      console.warn("[AI] OpenCode failed, falling back to Pollinations:", openCodeError.message);
     }
   }
 
@@ -105,13 +75,9 @@ export async function generateCompletion(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    if (res.status === 429) {
-      if (anthropicError) {
-        throw new Error(`Anthropic billing error (${anthropicError.message}) and Pollinations is rate-limited. Check your Anthropic billing at console.anthropic.com.`);
-      }
-      throw new Error("Pollinations rate limit exceeded. Try again in a minute.");
-    }
-    throw new Error(`Pollinations API error: ${res.status} — ${detail.slice(0, 500)}`);
+    const prefix = openCodeError ? `OpenCode failed (${openCodeError.message}) and ` : "";
+    if (res.status === 429) throw new Error(`${prefix}Pollinations rate limit exceeded. Try again in a minute.`);
+    throw new Error(`${prefix}Pollinations API error: ${res.status} — ${detail.slice(0, 500)}`);
   }
 
   const data = await res.json();

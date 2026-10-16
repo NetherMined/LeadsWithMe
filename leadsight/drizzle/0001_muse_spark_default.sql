@@ -1,0 +1,1 @@
+ALTER TABLE "marketing_plans" ALTER COLUMN "model_used" SET DEFAULT 'opencode/muse-spark-1.3-contributor-free';

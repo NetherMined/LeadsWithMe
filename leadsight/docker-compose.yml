@@ -42,6 +42,10 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-leadsight}:${POSTGRES_PASSWORD:-leadsight}@db:5432/${POSTGRES_DB:-leadsight}
       UPLOAD_DIR: /data/uploads
+      # The OpenCode service runs on the host, bound to 127.0.0.1; Docker Desktop proxies host.docker.internal to it.
+      OPENCODE_URL: ${OPENCODE_URL_DOCKER:-http://host.docker.internal:4096}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       # Host 3001: 3000 is taken by another local stack, and the Google OAuth redirect is registered on 3001.
       - "${APP_HOST_PORT:-3001}:3000"

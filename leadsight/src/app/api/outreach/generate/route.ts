@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
   await trackApiUsage({
     userId: user.id,
-    service: "anthropic",
+    service: "opencode",
     operation: "outreach-generation",
   });
 

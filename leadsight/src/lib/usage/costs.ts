@@ -9,9 +9,9 @@ export const COSTS = {
   "pagespeed": {
     "pagespeed": 0,
   },
-  "anthropic": {
-    // Haiku 4.5: $0.25/M input, $1.25/M output
-    "completion": 0, // calculated dynamically from token counts
+  "opencode": {
+    // Muse Spark via the local OpenCode service (free contributor tier)
+    "completion": 0,
   },
   "pollinations": {
     "completion": 0,
@@ -20,7 +20,7 @@ export const COSTS = {
 
 // Per-token costs for AI services (USD per token)
 export const TOKEN_COSTS = {
-  anthropic:    { input: 0.00000025, output: 0.00000125 },
+  opencode:     { input: 0,          output: 0 },
   pollinations: { input: 0,          output: 0 },
 };
 
@@ -28,7 +28,7 @@ export const TOKEN_COSTS = {
 export const FREE_TIERS = {
   "google-places": { monthly: 200, unit: "USD credit",      label: "$200/mo credit" },
   "pagespeed":     { daily: 25000, unit: "calls/day",        label: "25k/day" },
-  "anthropic":     { free: false,  label: "Pay-per-use" },
+  "opencode":      { free: true,   label: "Free tier" },
   "pollinations":  { free: true,   label: "Free tier" },
 } as const;
 
@@ -38,13 +38,10 @@ export function estimateCost(
   tokensInput?: number,
   tokensOutput?: number,
 ): number {
-  if (service === "anthropic" && (tokensInput || tokensOutput)) {
-    return (
-      (tokensInput ?? 0) * TOKEN_COSTS.anthropic.input +
-      (tokensOutput ?? 0) * TOKEN_COSTS.anthropic.output
-    );
+  if (service === "opencode" || service === "pollinations") {
+    const rates = TOKEN_COSTS[service];
+    return (tokensInput ?? 0) * rates.input + (tokensOutput ?? 0) * rates.output;
   }
-  if (service === "pollinations") return 0;
   const svcCosts = COSTS[service as keyof typeof COSTS];
   if (!svcCosts) return 0;
   return (svcCosts as Record<string, number>)[operation] ?? 0;

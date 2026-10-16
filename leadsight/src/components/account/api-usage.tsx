@@ -41,7 +41,7 @@ interface RecentCall {
 const SERVICE_LABELS: Record<string, string> = {
   "google-places": "Google Places",
   "pagespeed":     "PageSpeed",
-  "anthropic":     "Anthropic",
+  "opencode":      "Muse Spark (OpenCode)",
   "pollinations":  "Pollinations AI",
 };
 
@@ -221,7 +221,7 @@ export function ApiUsage() {
                 const svcColor = ({
                   "google-places": "#4285F4",
                   "pagespeed": "#34A853",
-                  "anthropic": "#D97706",
+                  "opencode": "#0EA5E9",
                   "pollinations": "#EC4899",
                 } as Record<string, string>)[row.service] ?? "#888";
 

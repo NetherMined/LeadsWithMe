@@ -5,11 +5,11 @@ import { db } from "@/lib/db/client";
 import { marketingPlans } from "@/lib/db/schema";
 import { getFullBusinessProfile } from "@/lib/db/queries";
 import { buildPlanPrompt } from "@/lib/ai/prompts";
-import { generateCompletion } from "@/lib/ai/client";
+import { generateCompletion, aiService } from "@/lib/ai/client";
 import { parsePlanResponse } from "@/lib/ai/parser";
 import { trackApiUsage } from "@/lib/usage/track";
 
-export const maxDuration = 120;
+export const maxDuration = 240;
 
 const schema = z.object({ business_id: z.string().uuid() });
 
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     // Track usage (awaited so it completes before response is sent)
     await trackApiUsage({
       userId: user.id,
-      service: result.model.startsWith("pollinations") ? "pollinations" : "anthropic",
+      service: aiService(result.model),
       operation: "completion",
       tokensInput: result.tokensInput,
       tokensOutput: result.tokensOutput,
