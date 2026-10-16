@@ -82,7 +82,7 @@ export function PipelineKanban({ initialData }: Props) {
 
     setIsSaving(true);
     try {
-      const payload: Record<string, any> = {
+      const payload: Record<string, unknown> = {
         id: selectedEntry.id,
         status: formStatus,
       };
@@ -151,10 +151,10 @@ export function PipelineKanban({ initialData }: Props) {
     <div className="space-y-6">
       {/* Filter Bar */}
       <div className="flex gap-2">
-        {["all", "email", "linkedin", "both"].map((channel) => (
+        {(["all", "email", "linkedin", "both"] as const).map((channel) => (
           <button
             key={channel}
-            onClick={() => setSelectedChannel(channel as any)}
+            onClick={() => setSelectedChannel(channel)}
             style={{
               background:
                 selectedChannel === channel ? "var(--accent-blue)" : "transparent",

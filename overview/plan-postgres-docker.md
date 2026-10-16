@@ -1,6 +1,6 @@
 # Plan: Replace Supabase with Postgres + Drizzle + Auth, and Containerise LeadSight
 
-_Created: 2026-10-15. Status: **approved 2026-10-15**. Auth = Better Auth; service fixes folded in as Phase 6._
+_Created: 2026-10-15. Status: **completed 2026-10-16** (Phases 1–7). Auth = Better Auth; service fixes folded in as Phase 6. App runs on host port 3001 (not 3000) and Postgres on 5433._
 
 ## Goal
 

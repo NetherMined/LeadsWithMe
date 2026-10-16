@@ -43,7 +43,6 @@ const SERVICE_LABELS: Record<string, string> = {
   "pagespeed":     "PageSpeed",
   "anthropic":     "Anthropic",
   "pollinations":  "Pollinations AI",
-  "supabase":      "Supabase",
 };
 
 function relativeTime(iso: string): string {
@@ -135,17 +134,6 @@ export function ApiUsage() {
           Service Usage
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-          <div style={CARD_STYLE}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3ECF8E", display: "inline-block" }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font-sans)" }}>Supabase</span>
-              </div>
-              <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>Free tier</span>
-            </div>
-            <p style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>Coming Soon</p>
-          </div>
-
           {byService.map(row => (
             <div key={row.service} style={CARD_STYLE}>
               <div className="flex items-center justify-between mb-3">
@@ -235,7 +223,6 @@ export function ApiUsage() {
                   "pagespeed": "#34A853",
                   "anthropic": "#D97706",
                   "pollinations": "#EC4899",
-                  "supabase": "#3ECF8E",
                 } as Record<string, string>)[row.service] ?? "#888";
 
                 return (

@@ -30,7 +30,6 @@ export const FREE_TIERS = {
   "pagespeed":     { daily: 25000, unit: "calls/day",        label: "25k/day" },
   "anthropic":     { free: false,  label: "Pay-per-use" },
   "pollinations":  { free: true,   label: "Free tier" },
-  "supabase":      { free: true,   label: "Free tier" },
 } as const;
 
 export function estimateCost(

@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LeadSight
 
-## Getting Started
+B2B lead generation and digital-marketing audit app. It finds local businesses with Google Places, audits their website, social and ad presence, scores them 0–100, writes AI marketing plans and outreach, and exports to Google Sheets, Docs, Drive and PDF.
 
-First, run the development server:
+Stack: Next.js 16, PostgreSQL 16 + Drizzle ORM, Better Auth (Google sign-in), Anthropic Claude, Puppeteer, Docker Compose.
+
+## Run with Docker
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # fill in the keys
+npm run docker:up            # db + migrations + app
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app is served on <http://localhost:3001> and Postgres on host port 5433. Migrations run automatically, and the dev user is seeded when `DEV_USER_ID` is set.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Run locally
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run db:up                # Postgres container only
+npm run db:migrate
+npm run db:seed              # optional: dev user for DISABLE_AUTH=true
+npm run dev                  # http://localhost:3001
+```
 
-## Learn More
+On Windows and macOS, Puppeteer uses your installed Chrome; set `CHROME_EXECUTABLE_PATH` if it isn't found.
 
-To learn more about Next.js, take a look at the following resources:
+## Configuration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+All variables are documented in [`.env.example`](./.env.example). The essentials:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, with the redirect URI `http://localhost:3001/api/auth/callback/google`
+- `GOOGLE_PLACES_API_KEY` (enable the PageSpeed Insights API on it, or set `PAGESPEED_API_KEY`)
+- `ANTHROPIC_API_KEY`, `BRAVE_SEARCH_API_KEY`
 
-## Deploy on Vercel
+## Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Script | What it does |
+|---|---|
+| `npm run dev` / `build` / `start` | Next.js dev server, production build, production server (port 3001) |
+| `npm run lint` / `npm test` | ESLint / Vitest |
+| `npm run db:generate` | Generate a migration from `src/lib/db/schema.ts` |
+| `npm run db:migrate` / `db:seed` / `db:studio` | Apply migrations / seed the dev user / open Drizzle Studio |
+| `npm run db:up` / `docker:up` | Start Postgres only / build and start the full stack |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Architecture notes for contributors are in the repository root `CLAUDE.md` and `overview/project_overview.md`.

@@ -28,14 +28,15 @@ export const calculateStringSimilarity = (str1: string, str2: string): number =>
   // Check if one contains the other (common: "joes cafe" vs "joescafe.com")
   if (n1.includes(n2) || n2.includes(n1)) return 0.9;
 
-  // Trigram similarity
-  const trigrams = (s: string): Set<string> => {
+  // Trigram similarity; bigrams when a string is too short to yield more than one trigram
+  const size = Math.min(n1.length, n2.length) <= 3 ? 2 : 3;
+  const ngrams = (s: string): Set<string> => {
     const t = new Set<string>();
-    for (let i = 0; i <= s.length - 3; i++) t.add(s.slice(i, i + 3));
+    for (let i = 0; i <= s.length - size; i++) t.add(s.slice(i, i + size));
     return t;
   };
-  const t1 = trigrams(n1);
-  const t2 = trigrams(n2);
+  const t1 = ngrams(n1);
+  const t2 = ngrams(n2);
   if (t1.size === 0 || t2.size === 0) return 0.0;
   let intersection = 0;
   for (const t of t1) if (t2.has(t)) intersection++;

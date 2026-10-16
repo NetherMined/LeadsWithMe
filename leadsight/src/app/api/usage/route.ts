@@ -73,7 +73,6 @@ export async function GET() {
       "pagespeed":     "#34A853",
       "anthropic":     "#D97706",
       "pollinations":  "#EC4899",
-      "supabase":      "#3ECF8E",
     };
 
     const byService = Object.entries(serviceMap).map(([service, { calls, cost }]) => {

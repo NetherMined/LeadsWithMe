@@ -7,12 +7,21 @@ const BID = "test-business-id";
 const perfectWebsite: WebsiteAudit = {
   id: "w1", business_id: BID,
   performance_score: 95, seo_score: 90, accessibility_score: 88,
-  mobile_friendly: true, has_ssl: true, has_analytics: true,
+  mobile_friendly: true, mobile_viewport: true, has_ssl: true, has_analytics: true,
   cms_detected: "wordpress", page_speed_ms: 800,
-  meta_title: "Test", meta_description: "Test description",
-  h1_count: 1, has_sitemap: true, has_blog: true,
-  blog_last_post_date: new Date().toISOString(),
+  meta_title: "Test", meta_description: "Test description", og_image: null,
+  h1_count: 1, has_sitemap: true, has_robots_txt: true,
+  structured_data: true, canonical_url: null, open_graph_tags: true,
+  has_blog: true, blog_last_post_date: new Date().toISOString(),
+  has_deals: false, deals_keywords: [],
   tech_stack: ["wordpress", "Google Analytics"],
+  tech_stack_detailed: {
+    platforms: ["wordpress"], analytics: ["Google Analytics"], advertising: [], payment: [],
+    email_marketing: [], customer_support: [], hosting_cdn: [], social_proof: [], booking: [],
+  },
+  external_deals: [],
+  has_chat_widget: false, has_cookie_consent: false,
+  contact_emails: [],
   created_at: new Date().toISOString(),
 };
 
@@ -40,8 +49,8 @@ const noSocial: SocialAudit = {
 
 const bothAds: AdsAudit = {
   id: "a1", business_id: BID,
-  has_meta_ads: true, meta_ad_count: 5,
-  has_google_ads: true, domain_authority: 50,
+  has_meta_ads: true, meta_ad_count: 5, meta_ad_categories: [],
+  has_google_ads: true, has_remarketing_pixel: true, domain_authority: 50,
   backlink_estimate: 1000,
   created_at: new Date().toISOString(),
 };

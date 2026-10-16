@@ -5,7 +5,6 @@ node_modules
 coverage
 logs
 data
-supabase
 *.tsbuildinfo
 next-env.d.ts
 npm-debug.log*
