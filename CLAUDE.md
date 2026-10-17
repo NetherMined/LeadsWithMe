@@ -57,7 +57,7 @@ This project uses **Next.js 16.2.3**, which has breaking changes from older vers
 | `app/api/` | All API routes (see below) |
 | `proxy.ts` | Optimistic session-cookie gate: redirects pages to `/login`, 401s `/api/*` |
 | `components/audit/` | Score gauge, website/social/ads cards, audit button, competitors card |
-| `components/leads/` | Lead detail tabs, email enricher, outreach summary, proposal downloads |
+| `components/leads/` | Lead detail tabs, email enricher, outreach summary, website proposal panel |
 | `components/outreach/` | Kanban, email preview, Loom script, fee calculator, issue ranker |
 | `components/search/` | Map, info panel, business/location inputs |
 | `components/proof/` | Case study, snapshot, before/after comparison |
@@ -71,6 +71,7 @@ This project uses **Next.js 16.2.3**, which has breaking changes from older vers
 | `lib/scraper/` | `website.ts`, `social.ts`, `ads.ts`, `deals.ts`, `web-search.ts`, `emails.ts`, `browser.ts` |
 | `lib/competitor/`, `lib/screenshots/`, `lib/pdf/` | Competitor deep-scrape, page screenshots, PDF report |
 | `lib/demo/` | AI demo-site generation + screenshots |
+| `lib/proposal/` | `generate.ts` (website proposal .md), `build.ts` (async build pipeline + versions) |
 | `lib/scoring/engine.ts` | `calculateDigitalPresenceScore()` |
 | `lib/google/` | `auth.ts` (tokens), `places.ts` (photo proxy paths), `sheets.ts`, `docs.ts`, `drive.ts` |
 | `lib/usage/` | `track.ts`, `costs.ts` — API usage + cost tracking |
@@ -104,8 +105,9 @@ Path alias `@/*` maps to `./src/*`.
 | `/api/export/docs` | POST | Export to Google Docs |
 | `/api/export/proposal-drive` | POST | Save the proposal as a Google Doc in the LeadSight Drive folder |
 | `/api/export/pdf` | POST | Generate PDF report (Puppeteer) |
-| `/api/proposal/demo` | POST | Generate AI demo site + screenshots |
-| `/api/proposal/demo-upload` | POST | Upload demo HTML / set demo site URL |
+| `/api/proposal/builds` | GET/POST | List a lead's proposal versions / start a proposal → demo → screenshots build (202, runs in `after()`) |
+| `/api/proposal/builds/[id]` | GET | One version with its proposal markdown and demo HTML |
+| `/api/proposal/demo-upload` | POST | Attach uploaded demo HTML or a hosted demo URL to a version (or create one) |
 | `/api/files/[...path]` | GET | Serve a user's uploaded file (owner only) |
 | `/api/outreach/generate` | POST | Generate outreach assets |
 | `/api/outreach/pipeline` | GET/POST/PATCH | CRM pipeline CRUD |

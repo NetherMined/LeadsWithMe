@@ -24,7 +24,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const [demo] = await db
       .select({ html: proposalDemos.html, proposal_md: proposalDemos.proposal_md })
       .from(proposalDemos)
-      .where(and(eq(proposalDemos.business_id, business.id), eq(proposalDemos.user_id, user.id)))
+      .where(and(eq(proposalDemos.business_id, business.id), eq(proposalDemos.user_id, user.id), eq(proposalDemos.status, "ready")))
       .orderBy(desc(proposalDemos.created_at))
       .limit(1);
 

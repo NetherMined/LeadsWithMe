@@ -1,8 +1,5 @@
 import { getAuthUser } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
-import { and, desc, eq } from "drizzle-orm";
-import { db } from "@/lib/db/client";
-import { proposalDemos } from "@/lib/db/schema";
 import { getFullBusinessProfile } from "@/lib/db/queries";
 import { ScoreGauge } from "@/components/audit/score-gauge";
 import { WebsiteCard } from "@/components/audit/website-card";
@@ -14,7 +11,7 @@ import { ExportButton } from "@/components/export/export-button";
 import { EmailEnricher } from "@/components/leads/email-enricher";
 import { CompetitorsCard } from "@/components/audit/competitors-card";
 import { LeadDetailTabs } from "@/components/leads/lead-detail-tabs";
-import { ProposalDownloads } from "@/components/leads/proposal-downloads";
+import { ProposalPanel } from "@/components/leads/proposal-panel";
 import type { CompetitorInfo } from "@/types/business";
 import { SOCIAL_ICONS } from "@/types/constants";
 
@@ -35,18 +32,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
   const { business, websiteAudit, socialAudit, adsAudit, score, plan } = profile;
   const planId = plan?.id ?? null;
-
-  const [demo] = await db
-    .select({
-      html: proposalDemos.html,
-      proposal_md: proposalDemos.proposal_md,
-      demo_site_url: proposalDemos.demo_site_url,
-    })
-    .from(proposalDemos)
-    .where(and(eq(proposalDemos.business_id, id), eq(proposalDemos.user_id, user.id)))
-    .orderBy(desc(proposalDemos.created_at))
-    .limit(1);
-  const demoData = demo ?? null;
 
   const socials = Object.entries(business.social_links ?? {}).filter(([, v]) => !!v);
 
@@ -180,14 +165,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         ]}
       />
 
-      {/* Proposal files */}
-      <ProposalDownloads
-        businessId={id}
-        businessName={business.name}
-        proposalMd={demoData?.proposal_md ?? null}
-        demoHtml={demoData?.html ?? null}
-        demoSiteUrl={demoData?.demo_site_url ?? null}
-      />
+      {/* Website proposal: build, view and export proposal + demo versions */}
+      <ProposalPanel businessId={id} businessName={business.name} hasWebsite={!!business.website} />
 
       {/* Tabbed content: Audit & Outreach */}
       <LeadDetailTabs

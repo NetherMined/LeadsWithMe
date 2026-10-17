@@ -15,6 +15,13 @@
       "when": 1792159436691,
       "tag": "0001_muse_spark_default",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792162907279,
+      "tag": "0002_proposal_build_status",
+      "breakpoints": true
     }
   ]
 }

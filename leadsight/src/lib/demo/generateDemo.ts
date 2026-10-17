@@ -20,9 +20,28 @@ export interface DemoBusiness {
   rating?: number | null;
   description?: string | null;
   socials?: Record<string, string> | null;
+  /** Existing site, if any: the demo is then a redesign concept rather than a first website. */
+  website?: string | null;
 }
 
 type CompleteFn = (system: string, user: string) => Promise<string>;
+
+const PROPOSAL_BUDGET = 9000;
+
+/**
+ * The parts of a proposal the demo needs, most important first: Design Direction (palette,
+ * fonts), then Structure, Content Brief and Brand Identity. Proposals run to ~20k characters,
+ * so a plain prefix would cut off the design direction.
+ */
+export function proposalForDemo(markdown: string): string {
+  const sections = markdown.split(/^(?=## )/m);
+  const pick = (re: RegExp) => sections.find((s) => re.test(s.split("\n")[0]));
+  const ordered = [/design direction/i, /structure/i, /content brief/i, /brand identity/i]
+    .map(pick)
+    .filter((s): s is string => Boolean(s));
+  const text = (ordered.length ? ordered : [markdown]).join("\n").trim();
+  return text.length > PROPOSAL_BUDGET ? `${text.slice(0, PROPOSAL_BUDGET)}\n…` : text;
+}
 
 export function buildDemoPrompt(business: DemoBusiness, proposalMarkdown?: string) {
   const socials = business.socials
@@ -40,13 +59,17 @@ You use Tailwind CSS (CDN), Alpine.js for interactivity, Swiper.js for carousels
 ABSOLUTE RULES:
 - Output ONLY raw HTML. Start your response with exactly <!DOCTYPE html> — nothing before it.
 - No markdown, no code fences, no explanation before or after the HTML.
-- Every CDN dependency must use the exact URLs specified in the user prompt.
+- Every CDN dependency must use the exact URLs specified in the user prompt. The only exception: the Google Fonts families may be swapped for the fonts a website proposal specifies.
 - All JavaScript initialisation must live inside a DOMContentLoaded listener.
 - The result must be a fully working, self-contained single HTML file.
 - Fully responsive (mobile-first), modern, clean, and conversion-focused.
 - Use the real business name, address, phone, and category throughout.`;
 
-  const user = `Generate a complete, professional one-page demo website for this business that currently has NO website.
+  const situation = business.website
+    ? `Generate a complete, professional one-page demo website for this business. It already has a website (${business.website}) that is underperforming; this demo is the modern redesign that replaces it.`
+    : "Generate a complete, professional one-page demo website for this business that currently has NO website.";
+
+  const user = `${situation}
 Make it look like a real, expensive, custom-built site a marketing agency would be proud of.
 
 ## BUSINESS DATA
@@ -58,7 +81,7 @@ Google Rating: ${business.rating ?? "5"}★
 Description: ${business.description ?? "Quality local business"}
 Social media: ${socials}
 
-${proposalMarkdown ? `## PROPOSAL NOTES (draw copy and structure ideas from this)\n${proposalMarkdown.slice(0, 1500)}\n` : ""}
+${proposalMarkdown ? `## WEBSITE PROPOSAL (follow its page structure, copy, colour palette and typography where it gives them)\n${proposalForDemo(proposalMarkdown)}\n` : ""}
 
 ---
 
@@ -100,7 +123,13 @@ ${proposalMarkdown ? `## PROPOSAL NOTES (draw copy and structure ideas from this
   }
 </script>
 
-Pick brand colours appropriate for "${business.category ?? "local business"}":
+${proposalMarkdown ? `BRAND COLOURS AND FONTS COME FROM THE WEBSITE PROPOSAL ABOVE (section "Design Direction"):
+- Its primary colour must be brand-600 exactly; derive the lighter (50-500) and darker (700-900) shades from it.
+- Use its accent/secondary colour (as an arbitrary Tailwind value, e.g. bg-[#hex]) for highlights and secondary buttons.
+- If it names Google Fonts for headings and body, load those in the Google Fonts <link> and use them in fontFamily (display = heading font, sans = body font) instead of Inter / Plus Jakarta Sans.
+Only if the proposal gives no palette, fall back to the category guide below.
+
+` : ""}Pick brand colours appropriate for "${business.category ?? "local business"}":
 - Restaurant/Café/Food → warm amber/orange
 - Hair/Beauty/Salon/Spa → rose/pink or soft purple
 - Law/Finance/Consulting → navy/slate with gold

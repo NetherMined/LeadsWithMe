@@ -390,7 +390,13 @@ export const proposalDemos = pgTable(
     screenshot_desktop_url: text("screenshot_desktop_url"),
     screenshot_mobile_url: text("screenshot_mobile_url"),
     demo_site_url: text("demo_site_url"),
+    // Build pipeline: queued → proposal → demo → screenshots → ready | failed.
+    // Rows saved directly (upload, URL, proposal-only) are "ready".
+    status: text("status").notNull().default("ready"),
+    error: text("error"),
+    finished_at: ts("finished_at"),
     created_at: createdAt(),
+    updated_at: updatedAt(),
   },
   (t) => [
     index("proposal_demos_business_idx").on(t.business_id),
