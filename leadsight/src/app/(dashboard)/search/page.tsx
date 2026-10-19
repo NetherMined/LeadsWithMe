@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type { Business, SearchSet } from "@/types/business";
-import { SOCIAL_ICONS } from "@/types/constants";
 import { getStorageMode } from "@/lib/storage-preference";
 import "leaflet/dist/leaflet.css";
 import { BusinessTypeInput } from "@/components/search/business-type-input";
@@ -38,14 +37,14 @@ function formatTimeAgo(iso: string): string {
 }
 
 export default function SearchPage() {
-  const [query, setQuery]       = useState("");
+  const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
-  const [country, setCountry]   = useState("");
-  const [limit, setLimit]       = useState(20);
-  const [results, setResults]   = useState<Business[]>([]);
+  const [country, setCountry] = useState("");
+  const [limit, setLimit] = useState(20);
+  const [results, setResults] = useState<Business[]>([]);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [staleOnly, setStaleOnly] = useState(false);
 
   const [savedSearches, setSavedSearches] = useState<SearchSet[]>([]);
@@ -55,9 +54,6 @@ export default function SearchPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [proposalGenerating, setProposalGenerating] = useState<Record<string, boolean>>({});
-  const [proposalDone, setProposalDone] = useState<Record<string, { driveUrl: string }>>({});
-  const [proposalError, setProposalError] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const first = results.find(b => b.latitude && b.longitude);
@@ -91,16 +87,14 @@ export default function SearchPage() {
       });
       const data = await res.json() as { businesses?: Business[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Search failed");
-      const found = data.businesses ?? [];
-      setResults(found);
-
+      setResults(data.businesses ?? []);
       if (setId) {
         await fetch("/api/search-sets", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: setId, last_run_at: new Date().toISOString(), result_count: found.length }),
+          body: JSON.stringify({ id: setId, last_run_at: new Date().toISOString(), result_count: (data.businesses ?? []).length }),
         });
-        setSavedSearches(prev => prev.map(s => s.id === setId ? { ...s, last_run_at: new Date().toISOString(), result_count: found.length } : s));
+        setSavedSearches(prev => prev.map(s => s.id === setId ? { ...s, last_run_at: new Date().toISOString(), result_count: (data.businesses ?? []).length } : s));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
@@ -153,52 +147,6 @@ export default function SearchPage() {
     setIsPanelOpen(true);
   }
 
-  async function handleGenerateProposal(business: Business) {
-    setProposalGenerating(prev => ({ ...prev, [business.id]: true }));
-    setProposalError(prev => ({ ...prev, [business.id]: "" }));
-    try {
-      const genRes = await fetch("/api/audit/website-proposal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ business_id: business.id }),
-      });
-      const genData = await genRes.json() as { markdown?: string; filename?: string; error?: string };
-      if (!genRes.ok || !genData.markdown) throw new Error(genData.error ?? "Generation failed");
-      const filename = genData.filename ?? `${business.name.replace(/[^a-z0-9]/gi, "-")}-website-proposal.md`;
-
-      if (getStorageMode() === "local") {
-        const blob = new Blob([genData.markdown], { type: "text/markdown" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
-        setProposalDone(prev => ({ ...prev, [business.id]: { driveUrl: "" } }));
-      } else {
-        const driveRes = await fetch("/api/export/proposal-drive", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ business_id: business.id, markdown: genData.markdown, filename }),
-        });
-        const driveData = await driveRes.json() as { url?: string; error?: string };
-        if (!driveRes.ok || !driveData.url) throw new Error(driveData.error ?? "Drive upload failed");
-        setProposalDone(prev => ({ ...prev, [business.id]: { driveUrl: driveData.url! } }));
-      }
-    } catch (err) {
-      console.error("[Proposal]", err);
-      const msg = err instanceof Error ? err.message : "Failed";
-      setProposalError(prev => ({
-        ...prev,
-        [business.id]: msg.includes("not connected") || msg.includes("No Google")
-          ? "Google Drive not connected — reconnect in Account Settings."
-          : msg,
-      }));
-    } finally {
-      setProposalGenerating(prev => ({ ...prev, [business.id]: false }));
-    }
-  }
-
   const canSearch = query.trim().length > 0 && location.trim().length > 0;
   const canSave = canSearch && !savedSearches.some(s => s.query === query && s.location === location);
 
@@ -217,7 +165,7 @@ export default function SearchPage() {
         onClose={() => setIsPanelOpen(false)}
       />
 
-      {/* Search panel overlay — stronger glassmorphism */}
+      {/* Search panel overlay */}
       <div style={{
         position: "absolute",
         top: 20,
@@ -226,238 +174,164 @@ export default function SearchPage() {
         width: "calc(100% - 40px)",
         maxWidth: "fit-content",
         zIndex: 1100,
-        background: "rgba(15, 23, 42, 0.65)",
+        background: "rgba(15, 23, 42, 0.72)",
         backdropFilter: "blur(16px) saturate(180%)",
         WebkitBackdropFilter: "blur(16px) saturate(180%)",
         borderRadius: 16,
         border: "1px solid rgba(255, 255, 255, 0.12)",
-        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08)",
         padding: "20px 24px",
         display: "flex",
         flexDirection: "column",
         gap: 14,
       }}>
-      <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#FFF", fontFamily: "var(--font-display)", margin: 0 }}>
-          Business Search
-        </h1>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 4 }}>
-          Find local businesses and audit their digital presence
-        </p>
-      </div>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#FFF", fontFamily: "var(--font-display)", margin: 0 }}>
+            Business Search
+          </h1>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 4 }}>
+            Find local businesses and audit their digital presence
+          </p>
+        </div>
 
-      <form onSubmit={handleSearch} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-          <BusinessTypeInput
-            value={query}
-            onChange={setQuery}
-            onSubmit={() => handleSearch()}
-          />
-          <LocationInput
-            value={location}
-            country={country}
-            onChange={handleLocationChange}
-            onSubmit={() => handleSearch()}
-          />
-          <button
-            type="submit"
-            disabled={loading || !canSearch}
-            style={{
-              flexShrink: 0,
-              borderRadius: 10,
-              background: canSearch ? "var(--accent)" : "var(--bg-elevated)",
-              border: "none",
-              color: canSearch ? "#0a0f18" : "var(--text-muted)",
-              padding: "0 24px",
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: canSearch && !loading ? "pointer" : "not-allowed",
-              opacity: loading ? 0.7 : 1,
-              transition: "all 150ms",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontFamily: "var(--font-sans)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {loading ? (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-                  style={{ animation: "spin 0.8s linear infinite" }}>
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                </svg>
-                Searching…
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                Search
-              </>
-            )}
-          </button>
-
-          {canSave && (
+        <form onSubmit={handleSearch} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+            <BusinessTypeInput value={query} onChange={setQuery} onSubmit={() => handleSearch()} />
+            <LocationInput value={location} country={country} onChange={handleLocationChange} onSubmit={() => handleSearch()} />
             <button
-              type="button"
-              onClick={openSaveModal}
-              title="Save this search as a named set"
+              type="submit"
+              disabled={loading || !canSearch}
               style={{
                 flexShrink: 0,
                 borderRadius: 10,
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                color: "var(--accent)",
-                padding: "0 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
+                background: canSearch ? "var(--accent)" : "var(--bg-elevated)",
+                border: "none",
+                color: canSearch ? "#0a0f18" : "var(--text-muted)",
+                padding: "0 24px",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: canSearch && !loading ? "pointer" : "not-allowed",
+                opacity: loading ? 0.7 : 1,
                 display: "flex",
                 alignItems: "center",
-                gap: 6,
+                gap: 8,
                 fontFamily: "var(--font-sans)",
                 whiteSpace: "nowrap",
-                transition: "border-color 150ms",
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-              </svg>
-              Save
+              {loading ? "Searching…" : "Search"}
             </button>
-          )}
-        </div>
+            {canSave && (
+              <button
+                type="button"
+                onClick={openSaveModal}
+                style={{
+                  flexShrink: 0,
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "var(--accent)",
+                  padding: "0 16px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-sans)",
+                }}
+              >
+                Save
+              </button>
+            )}
+          </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
-            Results:
-          </span>
-          {[1, 5, 10, 20, 50].map(n => (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>Results:</span>
+            {[1, 5, 10, 20, 50].map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setLimit(n)}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: 6,
+                  border: `1px solid ${limit === n ? "var(--accent-glow)" : "rgba(255,255,255,0.1)"}`,
+                  background: limit === n ? "var(--accent-dim)" : "transparent",
+                  color: limit === n ? "var(--accent)" : "var(--text-muted)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {n}
+              </button>
+            ))}
             <button
-              key={n}
               type="button"
-              onClick={() => setLimit(n)}
+              onClick={() => setStaleOnly(!staleOnly)}
               style={{
                 padding: "4px 12px",
                 borderRadius: 6,
-                border: `1px solid ${limit === n ? "var(--accent-glow)" : "rgba(255,255,255,0.1)"}`,
-                background: limit === n ? "var(--accent-dim)" : "transparent",
-                color: limit === n ? "var(--accent)" : "var(--text-muted)",
+                border: `1px solid ${staleOnly ? "var(--accent-orange-glow)" : "rgba(255,255,255,0.1)"}`,
+                background: staleOnly ? "var(--accent-orange-dim)" : "transparent",
+                color: staleOnly ? "var(--accent-orange)" : "var(--text-muted)",
                 fontSize: 12,
                 fontWeight: 600,
                 cursor: "pointer",
                 fontFamily: "var(--font-mono)",
-                transition: "all 120ms",
               }}
             >
-              {n}
+              Stale only (365+)
             </button>
-          ))}
-
-          <button
-            type="button"
-            onClick={() => setStaleOnly(!staleOnly)}
-            style={{
-              padding: "4px 12px",
-              borderRadius: 6,
-              border: `1px solid ${staleOnly ? "var(--accent-orange-glow)" : "rgba(255,255,255,0.1)"}`,
-              background: staleOnly ? "var(--accent-orange-dim)" : "transparent",
-              color: staleOnly ? "var(--accent-orange)" : "var(--text-muted)",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "var(--font-mono)",
-              transition: "all 120ms",
-            }}
-          >
-            Stale only (365+)
-          </button>
-
-          {results.length > 0 && !loading && (
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-              {results.length} business{results.length !== 1 ? "es" : ""} found
-            </span>
-          )}
-        </div>
-      </form>
-
-      {savedSearches.length > 0 && (
-        <div style={{
-          background: "rgba(0,0,0,0.25)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 12,
-          padding: "14px 16px",
-        }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10 }}>
-            Saved Searches
+            {results.length > 0 && !loading && (
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                {results.length} business{results.length !== 1 ? "es" : ""} found
+              </span>
+            )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {savedSearches.map(s => (
-              <div
-                key={s.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  background: "rgba(0,0,0,0.2)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" style={{ flexShrink: 0 }}>
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", fontFamily: "var(--font-sans)" }}>
-                    {s.name}
-                  </span>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginLeft: 8 }}>
-                    {s.query} · {s.location}
-                    {s.last_run_at && <> · ran {formatTimeAgo(s.last_run_at)} · {s.result_count} results</>}
-                  </span>
+        </form>
+
+        {savedSearches.length > 0 && (
+          <div style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10 }}>
+              Saved Searches
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {savedSearches.map(s => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{s.name}</span>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginLeft: 8 }}>
+                      {s.query} · {s.location}{s.last_run_at && <> · {formatTimeAgo(s.last_run_at)}</>}
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => { loadSavedSearch(s); handleSearch(undefined, s.query, s.location, s.country, s.limit_count, s.id); }} style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)", background: "var(--accent-dim)", border: "1px solid var(--accent-glow)", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>Run</button>
+                  <button type="button" onClick={() => handleDeleteSavedSearch(s.id)} style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}>✕</button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    loadSavedSearch(s);
-                    handleSearch(undefined, s.query, s.location, s.country, s.limit_count, s.id);
-                  }}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "var(--accent)",
-                    background: "var(--accent-dim)",
-                    border: "1px solid var(--accent-glow)",
-                    borderRadius: 6,
-                    padding: "4px 10px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Run
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteSavedSearch(s.id)}
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-muted)",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Save modal */}
+      {saveModalOpen && (
+        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setSaveModalOpen(false)}>
+          <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, minWidth: 320, maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 16, color: "var(--text-primary)" }}>Save Search</h3>
+            <input
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              placeholder="Search name"
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-input)", color: "var(--text-primary)", marginBottom: 12 }}
+            />
+            {saveError && <p style={{ color: "#ef4444", fontSize: 12, margin: "0 0 8px" }}>{saveError}</p>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setSaveModalOpen(false)} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer" }}>Cancel</button>
+              <button type="button" onClick={handleSaveSearch} disabled={saving} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--accent)", color: "#0a0f18", fontWeight: 600, cursor: "pointer" }}>{saving ? "Saving…" : "Save"}</button>
+            </div>
           </div>
         </div>
       )}
-      </div>
 
       {error && (
         <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "rgba(239,68,68,0.9)", color: "#fff", padding: "8px 16px", borderRadius: 8, fontSize: 12, zIndex: 1200 }}>
