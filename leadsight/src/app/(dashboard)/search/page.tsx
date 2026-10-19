@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type { Business, SearchSet } from "@/types/business";
-import { getStorageMode } from "@/lib/storage-preference";
 import "leaflet/dist/leaflet.css";
 import { BusinessTypeInput } from "@/components/search/business-type-input";
 import { LocationInput } from "@/components/search/location-input";
@@ -312,6 +311,70 @@ export default function SearchPage() {
           </div>
         )}
       </div>
+
+      {/* Bottom result cards strip */}
+      {results.length > 0 && (
+        <div style={{
+          position: "absolute",
+          bottom: 16,
+          left: 16,
+          right: 16,
+          zIndex: 1100,
+          display: "flex",
+          gap: 12,
+          overflowX: "auto",
+          padding: "8px 4px 12px",
+          scrollbarWidth: "thin",
+        }}>
+          {results.map(b => {
+            const selected = selectedBusiness?.place_id === b.place_id;
+            return (
+              <button
+                key={b.place_id || b.id}
+                type="button"
+                onClick={() => handleBusinessSelect(b)}
+                style={{
+                  flex: "0 0 280px",
+                  textAlign: "left",
+                  background: selected ? "rgba(52, 211, 153, 0.15)" : "rgba(15, 23, 42, 0.85)",
+                  backdropFilter: "blur(12px)",
+                  WebkitBackdropFilter: "blur(12px)",
+                  border: selected ? "1px solid rgba(52, 211, 153, 0.5)" : "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.35)",
+                  transition: "border-color 150ms, background 150ms",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#fff", fontFamily: "var(--font-sans)", lineHeight: 1.3 }}>
+                    {b.name}
+                  </div>
+                  {b.rating !== null && (
+                    <span style={{ fontSize: 12, color: "#f59e0b", fontWeight: 600, flexShrink: 0 }}>
+                      ★ {b.rating.toFixed(1)}
+                    </span>
+                  )}
+                </div>
+                {b.category && (
+                  <div style={{ fontSize: 11, color: "var(--accent)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
+                    {b.category}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6, lineHeight: 1.4, maxHeight: 32, overflow: "hidden" }}>
+                  {b.address}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 10, fontFamily: "var(--font-mono)" }}>
+                  <span style={{ color: b.website ? "#22c55e" : "#ef4444" }}>{b.website ? "✓ site" : "✗ site"}</span>
+                  <span style={{ color: b.phone ? "#22c55e" : "#64748b" }}>{b.phone ? "✓ phone" : "— phone"}</span>
+                  {b.review_count > 0 && <span style={{ color: "#94a3b8" }}>{b.review_count} reviews</span>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Save modal */}
       {saveModalOpen && (
