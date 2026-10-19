@@ -55,7 +55,8 @@ This project uses **Next.js 16.2.3**, which has breaking changes from older vers
 | `app/(dashboard)/` | Authenticated pages: search, leads, plans, outreach, exports, proof, account |
 | `app/(auth)/` | Login page |
 | `app/api/` | All API routes (see below) |
-| `proxy.ts` | Optimistic session-cookie gate: redirects pages to `/login`, 401s `/api/*` |
+| `app/page.tsx` | Public landing page (`components/landing/`); signed-in users get an "Open dashboard" CTA |
+| `proxy.ts` | Optimistic session-cookie gate: `/` and `/login` are public; redirects other pages to `/login`, 401s `/api/*` |
 | `components/audit/` | Score gauge, website/social/ads cards, audit button, competitors card |
 | `components/leads/` | Lead detail tabs, email enricher, outreach summary, website proposal panel |
 | `components/outreach/` | Kanban, email preview, Loom script, fee calculator, issue ranker |
@@ -226,6 +227,8 @@ BRAVE_SEARCH_API_KEY        # Web search enrichment, competitor discovery
 OPENPAGERANK_API_KEY        # Domain authority
 UPLOAD_DIR                  # Default ./data/uploads (/data/uploads in Docker)
 CHROME_EXECUTABLE_PATH      # Chrome/Chromium binary for Puppeteer
+CONTACT_EMAIL               # Landing page "Email us" link (hidden when unset)
+BOOKING_URL                 # Landing page "Book a call" link (hidden when unset)
 LOG_DIR                     # Default <cwd>/logs
 
 # Dev only (server-side)

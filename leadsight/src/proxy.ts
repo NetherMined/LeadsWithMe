@@ -12,7 +12,8 @@ export function proxy(request: NextRequest) {
   if (process.env.DISABLE_AUTH === "true") return NextResponse.next();
 
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+  // The landing page is public; only the exact root path, not everything under it.
+  if (pathname === "/" || PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return NextResponse.next();
   }
 

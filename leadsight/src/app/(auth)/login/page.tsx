@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth/server";
 import { GoogleSignInButton } from "./google-sign-in-button";
@@ -15,6 +16,9 @@ export default async function LoginPage() {
         <GoogleSignInButton />
         <p className="text-center text-xs text-gray-500">
           By signing in, you grant LeadSight access to create files in your Google Drive.
+        </p>
+        <p className="text-center text-sm">
+          <Link href="/" className="text-gray-600 hover:text-gray-900">← Back to home</Link>
         </p>
       </div>
     </div>
