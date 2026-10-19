@@ -232,13 +232,23 @@ Return the full HTML document now, starting with <!DOCTYPE html>.`;
   return { system, user };
 }
 
-/** Strip code fences / preamble and return clean HTML. */
+/**
+ * Strip code fences and prose around the document and return clean HTML.
+ * A reply that hit the output limit arrives in parts (see finalAnswer() in lib/ai/opencode.ts),
+ * and a continuation may open its own fence mid-document, so fence lines are dropped wherever
+ * they are and the document runs from its first opening tag to the last </html>.
+ */
 export function extractHtml(raw: string): string {
-  let html = raw.trim();
-  const fence = html.match(/```(?:html)?\s*([\s\S]*?)```/i);
-  if (fence) html = fence[1].trim();
-  const start = html.search(/<!DOCTYPE html>|<html[\s>]/i);
-  if (start > 0) html = html.slice(start);
+  let html = raw.replace(/```[a-z]*[ \t]*\r?\n?/gi, "").trim();
+  const starts = [...html.matchAll(/<!DOCTYPE html>|<html[\s>]/gi)].map((m) => m.index);
+  if (starts.length) {
+    // A reply that restarted the document from scratch: keep the last complete copy.
+    const complete = starts.filter((i) => /<\/html>/i.test(html.slice(i)));
+    const doctypes = complete.filter((i) => /^<!DOCTYPE/i.test(html.slice(i)));
+    html = html.slice(doctypes.at(-1) ?? complete.at(-1) ?? starts[0]);
+  }
+  const end = html.toLowerCase().lastIndexOf("</html>");
+  if (end !== -1) html = html.slice(0, end + "</html>".length);
   return html;
 }
 
@@ -256,6 +266,9 @@ export async function generateDemoHtml(
   const raw = await complete(system, user);
   const html = extractHtml(raw);
   if (!/<html[\s>]/i.test(html)) {
+    console.error(
+      `[demo] Model reply is not an HTML document (${raw.length} chars). Start: ${JSON.stringify(raw.slice(0, 300))} End: ${JSON.stringify(raw.slice(-300))}`
+    );
     throw new Error("Model did not return a valid HTML document");
   }
   return html;
