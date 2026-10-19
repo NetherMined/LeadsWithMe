@@ -11,6 +11,15 @@ import type { WebsiteAudit, SocialAudit, AdsAudit } from "@/types/audit";
 import type { DigitalPresenceScore } from "@/types/score";
 import type { CompetitorInfo } from "@/types/business";
 
+interface CompetitorAverages {
+  total?: number;
+  website?: number;
+  social?: number;
+  engagement?: number;
+  advertising?: number;
+  reviews?: number;
+}
+
 interface LeadDetailTabsProps {
   businessId: string;
   score: DigitalPresenceScore | null;
@@ -22,7 +31,9 @@ interface LeadDetailTabsProps {
     name: string;
     rating: number | null;
     review_count: number;
+    category?: string;
   };
+  competitorAverages?: CompetitorAverages | null;
 }
 
 export function LeadDetailTabs({
@@ -33,12 +44,12 @@ export function LeadDetailTabs({
   adsAudit,
   competitors,
   businessInfo,
+  competitorAverages,
 }: LeadDetailTabsProps) {
   const [activeTab, setActiveTab] = useState("audit");
 
   return (
     <div>
-      {/* Tab navigation */}
       <div className="flex border-b border-border mb-5">
         <button
           onClick={() => setActiveTab("audit")}
@@ -62,11 +73,10 @@ export function LeadDetailTabs({
         </button>
       </div>
 
-      {/* Tab content */}
       {activeTab === "audit" && (
         <div>
           <div className="grid gap-6 lg:grid-cols-2">
-            <ScoreGauge score={score} size="lg" />
+            <ScoreGauge score={score} size="lg" competitorAverages={competitorAverages} />
             <WebsiteCard audit={websiteAudit} />
           </div>
           <div className="grid gap-6 lg:grid-cols-2 mt-6">
@@ -82,7 +92,9 @@ export function LeadDetailTabs({
                   name: businessInfo.name,
                   rating: businessInfo.rating,
                   review_count: businessInfo.review_count || 0,
+                  category: businessInfo.category,
                 }}
+                businessId={businessId}
               />
             </div>
           )}
