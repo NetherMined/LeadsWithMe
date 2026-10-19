@@ -1,7 +1,7 @@
 import "server-only";
 
 /**
- * Muse Spark through the local OpenCode background service (`opencode service`).
+ * DeepSeek V4.1 Flash (free) through the local OpenCode background service (`opencode service`).
  *
  * OpenCode's free models only answer requests made by OpenCode itself, so each completion
  * runs as a throwaway OpenCode session. That session is an agent with tools, and prompts
@@ -9,10 +9,10 @@ import "server-only";
  * is rejected: the model can ask to run a tool, but nothing ever runs.
  *
  * Uses OpenCode v2's /api routes, which are not publicly documented. Verified against
- * opencode 2.0.29; re-test after OpenCode upgrades.
+ * opencode 2.0.32; re-test after OpenCode upgrades.
  */
 
-export const DEFAULT_OPENCODE_MODEL = "opencode/muse-spark-1.3-contributor-free";
+export const DEFAULT_OPENCODE_MODEL = "opencode/deepseek-v4.1-flash-free";
 const DEFAULT_OPENCODE_URL = "http://127.0.0.1:4096";
 const POLL_MS = 750;
 
@@ -85,6 +85,26 @@ function parseModel(ref: string): { providerID: string; id: string } {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function messageText(m: OpenCodeMessage): string {
+  return (m.content ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
+}
+
+/**
+ * The answer is the latest assistant message with text. When a reply hits the output
+ * token limit (finish "length"), OpenCode adds a synthetic "continue" turn and the next
+ * message picks up mid-token, so the run of truncated messages before it is joined back on.
+ * `assistant` is newest first.
+ */
+export function finalAnswer(assistant: OpenCodeMessage[]): string {
+  const last = assistant.findIndex((m) => messageText(m).trim());
+  if (last === -1) return "";
+  let text = messageText(assistant[last]);
+  for (let i = last + 1; i < assistant.length && assistant[i].finish === "length"; i++) {
+    text = messageText(assistant[i]) + text;
+  }
+  return text;
+}
+
 export interface OpenCodeCompletion {
   text: string;
   tokensInput?: number;
@@ -141,10 +161,7 @@ export async function openCodeComplete(
         const message = failed?.error?.message ?? "OpenCode generation failed";
         throw new OpenCodeError(message, failed?.error?.type === "provider.auth");
       }
-      // Newest first: the final answer is the latest assistant message that has text.
-      const answer = assistant
-        .map((m) => (m.content ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join(""))
-        .find((t) => t.trim());
+      const answer = finalAnswer(assistant);
       if (!answer) throw new OpenCodeError("OpenCode returned an empty completion");
 
       const info = await call<{ tokens?: { input?: number; output?: number } }>("GET", sessionPath).catch(() => null);

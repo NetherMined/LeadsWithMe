@@ -10,7 +10,7 @@ export const COSTS = {
     "pagespeed": 0,
   },
   "opencode": {
-    // Muse Spark via the local OpenCode service (free contributor tier)
+    // DeepSeek V4.1 Flash via the local OpenCode service (free tier)
     "completion": 0,
   },
   "pollinations": {

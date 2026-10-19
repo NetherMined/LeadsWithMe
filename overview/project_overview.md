@@ -12,7 +12,7 @@ LeadSight is a B2B lead-generation and digital-marketing-audit SaaS for agencies
 2. **Enriches** them (website scrape, social links, emails, Brave web search)
 3. **Audits** their digital presence: website, social, ads, competitors
 4. **Scores** them 0–100 with an A–F grade
-5. **Generates** AI marketing plans, website proposals, demo sites and outreach assets (Muse Spark via the local OpenCode CLI)
+5. **Generates** AI marketing plans, website proposals, demo sites and outreach assets (DeepSeek V4.1 Flash via the local OpenCode CLI)
 6. **Tracks** the sales pipeline (Kanban CRM, follow-ups, before/after proof)
 7. **Exports** to Google Sheets, Google Docs, Google Drive and PDF
 
@@ -44,7 +44,7 @@ The original Supabase project was deleted (NXDOMAIN), so the app was moved to a 
 | Google Places v1 (search, details, autocomplete, photos) | ✅ | Photos served through `/api/places/photo`; no `key=` in any response |
 | PageSpeed Insights | ✅ | API enabled on the Places key; a mobile audit takes ~20–25s |
 | Brave Search | ✅ | |
-| Muse Spark `opencode/muse-spark-1.3-contributor-free` via local OpenCode | ✅ | Plan ~35s, outreach ~11s, website proposal ~120s; tool requests rejected |
+| DeepSeek V4.1 Flash `opencode/deepseek-v4.1-flash-free` via local OpenCode | ✅ | Bridge and tool rejection re-verified on 2.0.32 (short completion ~4s); Muse Spark timings were plan ~35s, proposal ~120s |
 | Pollinations fallback (`gen.pollinations.ai/v1`, `openai/gpt-5.4-mini`) | ✅ | Forced fallback returns a completion |
 | Puppeteer (PDF export, screenshots, competitor scrape) | ✅ | Debian Chromium in the image |
 | SSRF guard | ✅ | Metadata IP, loopback, `db` service, DNS-to-private hosts and redirects to them are all blocked |
@@ -76,7 +76,7 @@ The original Supabase project was deleted (NXDOMAIN), so the app was moved to a 
 | Auth | Better Auth (Google provider, DB sessions, Drizzle adapter) | 1.7 |
 | File storage | Local volume (`UPLOAD_DIR`) | — |
 | Validation | Zod | ^4.3 |
-| AI | Muse Spark through the local OpenCode CLI service (`lib/ai/opencode.ts`), Pollinations fallback | opencode 2.0.29 |
+| AI | DeepSeek V4.1 Flash through the local OpenCode CLI service (`lib/ai/opencode.ts`), Pollinations fallback | opencode 2.0.32 |
 | Outbound HTTP | fetch; `undici` Agent for the SSRF-guarded `safeFetch` | undici ^7.25 |
 | Scraping (static) | cheerio + fetch | ^1.2 |
 | Scraping (headless) | puppeteer-core + Debian Chromium (Docker) / local Chrome / @sparticuz/chromium | ^24 |
@@ -104,7 +104,7 @@ The original Supabase project was deleted (NXDOMAIN), so the app was moved to a 
 | Brave Search | Web and social enrichment, competitor sites for proposals | `api.search.brave.com/res/v1/web/search` | `BRAVE_SEARCH_API_KEY` | `lib/scraper/web-search.ts`, `api/audit/website-proposal` |
 | Open PageRank | Domain authority | `openpagerank.com/api/v1.0` | `OPENPAGERANK_API_KEY` (unset) | `lib/scraper/ads.ts` |
 | Meta Ad Library | Active FB/IG ads | — (stub) | — | `lib/scraper/ads.ts` |
-| Muse Spark (OpenCode) | Plans, proposals, outreach, A/B suggestions, demo HTML | local `opencode service` v2 `/api` (port 4096) | `OPENCODE_SERVER_PASSWORD`, `OPENCODE_URL`, `OPENCODE_MODEL` | `lib/ai/opencode.ts` |
+| DeepSeek V4.1 Flash (OpenCode) | Plans, proposals, outreach, A/B suggestions, demo HTML | local `opencode service` v2 `/api` (port 4096) | `OPENCODE_SERVER_PASSWORD`, `OPENCODE_URL`, `OPENCODE_MODEL` | `lib/ai/opencode.ts` |
 | Pollinations | AI fallback when OpenCode is unavailable | `gen.pollinations.ai/v1/chat/completions` | `POLLINATIONS_API_KEY`, `POLLINATIONS_MODEL` | `lib/ai/client.ts` |
 | Deal sites | Deal / promotion detection | wikideals.co.za, daddysdeals.co.za, groupon.co.za (scraped) | — | `lib/scraper/deals.ts` |
 | Google Sheets / Docs / Drive | Exports | googleapis via OAuth2 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `lib/google/*` |
@@ -230,7 +230,7 @@ All routes require a session except `/api/auth/*` and `/api/log`. Every business
 4. **Plan.** `getFullBusinessProfile(id, userId)` → `buildPlanPrompt()` → `generateCompletion()` → `parsePlanResponse()` → `marketing_plans`.
 5. **Website proposal.** For businesses with no website:
    - Brave finds competitor sites.
-   - Muse Spark writes a nine-section Markdown proposal.
+   - The AI writes a nine-section Markdown proposal.
    - The proposal can be downloaded, exported to Drive, or paired with a generated or uploaded demo site.
 6. **Outreach.** Generated assets go into the Kanban pipeline, with follow-up reminders.
 7. **Proof.** Before/after screenshots feed a case study.
@@ -244,7 +244,7 @@ All routes require a session except `/api/auth/*` and `/api/log`. Every business
 
 ### AI Client
 
-- `generateCompletion(system, user, {maxTokens})` sends the prompt to Muse Spark through the local OpenCode service: a throwaway session with every permission set to `ask`, and every tool request rejected, so prompt injection in scraped text cannot run anything. 240s timeout.
+- `generateCompletion(system, user, {maxTokens})` sends the prompt to DeepSeek V4.1 Flash through the local OpenCode service: a throwaway session with every permission set to `ask`, and every tool request rejected, so prompt injection in scraped text cannot run anything. 240s timeout.
 - If OpenCode is unreachable, refuses or fails, it falls back to Pollinations (up to two 429 retries, 120s timeout). Unreachable/refused opens a 2-minute circuit breaker.
 
 ### Outbound Request Safety
@@ -273,7 +273,7 @@ See `leadsight/.env.example`.
 | `GOOGLE_PLACES_API_KEY` | server | ✅ | PageSpeed Insights API must be enabled on it unless `PAGESPEED_API_KEY` is set |
 | `PAGESPEED_API_KEY` | server | — | Dedicated PageSpeed key |
 | `OPENCODE_SERVER_PASSWORD` | server | ✅ | Same value as `opencode service set password` |
-| `OPENCODE_URL`, `OPENCODE_SERVER_USERNAME`, `OPENCODE_MODEL`, `OPENCODE_DIRECTORY` | server | — | Defaults `http://127.0.0.1:4096`, `opencode`, `opencode/muse-spark-1.3-contributor-free`, none |
+| `OPENCODE_URL`, `OPENCODE_SERVER_USERNAME`, `OPENCODE_MODEL`, `OPENCODE_DIRECTORY` | server | — | Defaults `http://127.0.0.1:4096`, `opencode`, `opencode/deepseek-v4.1-flash-free`, none |
 | `POLLINATIONS_API_KEY`, `POLLINATIONS_MODEL` | server | — | Fallback; default model `openai/gpt-5.4-mini` |
 | `BRAVE_SEARCH_API_KEY` | server | ✅ | |
 | `OPENPAGERANK_API_KEY` | server | — | Unset, so domain authority is always the default |
@@ -295,7 +295,7 @@ See `leadsight/.env.example`.
 
 ### P2: Modernisation and Quality
 
-5. **AI:** the OpenCode bridge depends on undocumented v2 routes and on the free contributor tier (Meta trains on prompts; it is time-limited). Plan a paid fallback (OpenCode Zen `muse-spark-1.3` or OpenRouter). Use structured outputs or tool use for plan JSON instead of regex parsing, and use prompt caching for the large static system prompts.
+5. **AI:** the OpenCode bridge depends on undocumented v2 routes and on a free OpenCode Zen model (prompts may be used for training; time-limited). The Pollinations fallback is out of credits (Oct 2026). Plan a paid fallback (OpenCode Zen or OpenRouter). Use structured outputs or tool use for plan JSON instead of regex parsing, and use prompt caching for the large static system prompts.
 6. **Implement Meta Ad Library** (needs a Graph API token), or label ads detection in the UI as pixel-based only.
 7. **Tests:** add route-level tests for auth and ownership, `safeFetch` tests, and mocked scraper tests.
 8. **Lint:** clear the 38 warnings (mostly unused variables).

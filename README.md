@@ -40,12 +40,12 @@ Browser ──► Next.js app (port 3001) ──► PostgreSQL 16
                ├─► Google Places / PageSpeed / Sheets / Docs / Drive
                ├─► Brave Search, Open PageRank, deal sites
                ├─► Headless Chromium (PDFs, screenshots, competitor scraping)
-               └─► AI: Muse Spark via the local OpenCode service ─(fallback)─► Pollinations
+               └─► AI: DeepSeek V4.1 Flash via local OpenCode ─(fallback)─► Pollinations
 ```
 
 1. **Search** calls Google Places, then enriches each place (5 at a time) by scraping its website and running a Brave web search. Results are saved per user.
 2. **Run Audit** checks the website, social channels, ads and competitors, then computes the score.
-3. **AI features** (plan, proposal, demo site, outreach) send a prompt to Muse Spark through your local OpenCode CLI. If OpenCode is not running, they fall back to Pollinations.
+3. **AI features** (plan, proposal, demo site, outreach) send a prompt to DeepSeek V4.1 Flash through your local OpenCode CLI. If OpenCode is not running, they fall back to Pollinations.
 4. **Exports** use your Google account's Sheets, Docs and Drive permissions, granted at sign-in.
 
 Every record belongs to the signed-in user; another user's data returns 404.
@@ -58,7 +58,7 @@ Every record belongs to the signed-in user; another user's data returns 404.
 | UI | Tailwind CSS v4, shadcn/ui, Leaflet + OpenStreetMap |
 | Database | PostgreSQL 16, Drizzle ORM (`postgres.js`) |
 | Auth | Better Auth with Google sign-in, database sessions |
-| AI | Muse Spark (`opencode/muse-spark-1.3-contributor-free`) through the OpenCode CLI; Pollinations fallback |
+| AI | DeepSeek V4.1 Flash (`opencode/deepseek-v4.1-flash-free`) through the OpenCode CLI; Pollinations fallback |
 | Scraping | cheerio, Puppeteer Core with Chromium |
 | Google | Places API (New), PageSpeed Insights, Sheets, Docs, Drive (`googleapis`) |
 | Validation and tests | Zod, Vitest, ESLint |
@@ -125,13 +125,13 @@ When you sign in, Google asks for access to Sheets, Docs and Drive. **Tick all t
 
 ### 2. OpenCode (AI)
 
-LeadSight's AI runs on Meta's Muse Spark through the [OpenCode](https://opencode.ai) CLI on your machine. OpenCode's free Muse Spark model only answers requests made by OpenCode itself, so the app talks to OpenCode's background service rather than calling an AI API directly.
+LeadSight's AI runs on DeepSeek V4.1 Flash through the [OpenCode](https://opencode.ai) CLI on your machine. OpenCode's free models only answer requests made by OpenCode itself, so the app talks to OpenCode's background service rather than calling an AI API directly.
 
 1. Install OpenCode and make sure the model is available:
 
    ```bash
    npm install -g @opencode/cli          # or see https://opencode.ai/docs
-   opencode models | grep muse-spark      # expect opencode/muse-spark-1.3-contributor-free
+   opencode models | grep deepseek-v4.1   # expect opencode/deepseek-v4.1-flash-free
    ```
 
 2. Give the background service a fixed port and a password, then restart it:
@@ -153,9 +153,9 @@ Keep the service bound to `127.0.0.1` (the default). Docker Desktop can still re
 
 Things to know:
 
-- **OpenCode must be running** for Muse Spark to be used. Otherwise the app uses Pollinations.
-- **The free "contributor" tier lets Meta train on your prompts and completions**, which include business names, contact details and audit findings. It is also offered for a limited time. To switch to the paid model, change `OPENCODE_MODEL` (for example `opencode/muse-spark-1.3` after signing in to OpenCode Zen).
-- The integration uses OpenCode's internal `/api` routes, verified with opencode 2.0.29. Re-test AI features after upgrading OpenCode.
+- **OpenCode must be running** for DeepSeek to be used. Otherwise the app uses Pollinations.
+- **Free OpenCode Zen models may use your prompts and completions to improve the model**, and these include business names, contact details and audit findings. Free models are also offered for a limited time. To use another model, change `OPENCODE_MODEL` to any `provider/model` from `opencode models` (for example `opencode/muse-spark-1.3-contributor-free`, or a paid model after signing in to OpenCode Zen).
+- The integration uses OpenCode's internal `/api` routes, verified with opencode 2.0.32. Re-test AI features after upgrading OpenCode.
 
 ### 3. Other services
 
@@ -191,7 +191,7 @@ All variables live in `leadsight/.env.local`. The template is [`leadsight/.env.e
 | `OPENCODE_SERVER_PASSWORD` | ✅* | — | Password of the local OpenCode service |
 | `OPENCODE_URL` | — | `http://127.0.0.1:4096` | OpenCode service URL (`host.docker.internal:4096` in Docker) |
 | `OPENCODE_SERVER_USERNAME` | — | `opencode` | OpenCode basic-auth user |
-| `OPENCODE_MODEL` | — | `opencode/muse-spark-1.3-contributor-free` | Model, as `provider/model` |
+| `OPENCODE_MODEL` | — | `opencode/deepseek-v4.1-flash-free` | Model, as `provider/model` |
 | `OPENCODE_DIRECTORY` | — | — | Empty host folder the AI sessions run in |
 | `POLLINATIONS_API_KEY` | ✅* | — | Fallback AI provider |
 | `POLLINATIONS_MODEL` | — | `openai/gpt-5.4-mini` | Fallback model |
@@ -270,7 +270,7 @@ LeadsWithMe/
 | Sign-in fails with `redirect_uri_mismatch` | Add `http://localhost:3001/api/auth/callback/google` to the OAuth client's redirect URIs. |
 | Exports fail with "insufficient scopes" | Sign out, sign in again and tick the Sheets, Docs and Drive boxes on Google's consent screen. |
 | Audit shows "PageSpeed Insights API is blocked for this API key" | Enable the PageSpeed Insights API on the key's API restrictions, or set `PAGESPEED_API_KEY`. Changes can take a few minutes. |
-| AI results come from Pollinations instead of Muse Spark | Check `opencode service status` shows `http://127.0.0.1:4096` and that `OPENCODE_SERVER_PASSWORD` matches the service password. After a failure the app skips OpenCode for 2 minutes. |
+| AI results come from Pollinations instead of DeepSeek | Check `opencode service status` shows `http://127.0.0.1:4096` and that `OPENCODE_SERVER_PASSWORD` matches the service password. After a failure the app skips OpenCode for 2 minutes. |
 | AI errors mention `FreeTierError` | The free model only works through OpenCode; check the OpenCode version, or switch `OPENCODE_MODEL` to a paid model. |
 | Port 3001 or 5433 already in use | Set `APP_HOST_PORT` / `POSTGRES_HOST_PORT` before `npm run docker:up`, and update the OAuth redirect URI if you change the app port. |
 | PDF export fails locally with "Chrome not found" | Install Google Chrome or set `CHROME_EXECUTABLE_PATH`. |

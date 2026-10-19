@@ -41,7 +41,7 @@ interface RecentCall {
 const SERVICE_LABELS: Record<string, string> = {
   "google-places": "Google Places",
   "pagespeed":     "PageSpeed",
-  "opencode":      "Muse Spark (OpenCode)",
+  "opencode":      "DeepSeek V4.1 Flash (OpenCode)",
   "pollinations":  "Pollinations AI",
 };
 

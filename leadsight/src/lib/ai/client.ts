@@ -32,7 +32,7 @@ export async function generateCompletion(
 
   let openCodeError: Error | null = null;
 
-  // Muse Spark via the local OpenCode service first (skip if circuit breaker is open)
+  // DeepSeek V4.1 Flash via the local OpenCode service first (skip if circuit breaker is open)
   if (isOpenCodeConfigured() && Date.now() > openCodeUnavailableUntil) {
     try {
       return await openCodeComplete(systemPrompt, userPrompt);
