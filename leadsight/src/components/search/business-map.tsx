@@ -39,14 +39,20 @@ export function BusinessMap({ businesses, center, onBusinessSelect, selectedBusi
         attributionControl: false,
       });
 
-      // Dark-friendly CartoDB tiles
+      // Free OSM tiles + CSS invert for dark mode (no API key required)
       L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
           maxZoom: 19,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         }
       ).addTo(map);
+
+      // Dark theme filter on tiles
+      const tilePane = map.getPane("tilePane");
+      if (tilePane) {
+        tilePane.style.filter = "invert(1) hue-rotate(180deg) brightness(0.85) contrast(1.1)";
+      }
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
       L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
@@ -113,10 +119,10 @@ export function BusinessMap({ businesses, center, onBusinessSelect, selectedBusi
 
       const marker = L.marker([business.latitude, business.longitude], { icon }).addTo(map);
 
-      const popupContent = `<div style="font-family:system-ui,sans-serif;font-size:13px;min-width:140px;">
+      const popupContent = `<div style="font-family:system-ui,sans-serif;font-size:13px;min-width:140px;color:#111;">
         <strong>${business.name}</strong><br/>
-        ${business.rating ? `<span style="color:#f59e0b">★ ${business.rating}</span> · ${business.review_count} reviews` : ""}
-        ${business.category ? `<br/><span style="color:#94a3b8;font-size:11px">${business.category}</span>` : ""}
+        ${business.rating ? `<span style="color:#d97706">★ ${business.rating}</span> · ${business.review_count} reviews` : ""}
+        ${business.category ? `<br/><span style="color:#475569;font-size:11px">${business.category}</span>` : ""}
       </div>`;
 
       marker.bindPopup(popupContent, { closeButton: false, offset: [0, -8] });
