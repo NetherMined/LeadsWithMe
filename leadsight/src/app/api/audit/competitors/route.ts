@@ -26,6 +26,17 @@ interface PlaceDetailsResult {
   websiteUri?: string;
 }
 
+/** Simple relevance heuristic: shared words between target category/name and candidate. */
+function relevanceScore(targetCategory: string, targetName: string, candidateName: string): number {
+  const words = (s: string) =>
+    s.toLowerCase().split(/\W+/).filter(w => w.length > 2);
+  const target = new Set([...words(targetCategory), ...words(targetName)]);
+  const cand = words(candidateName);
+  if (cand.length === 0) return 0;
+  const overlap = cand.filter(w => target.has(w)).length;
+  return overlap / cand.length;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -44,12 +55,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Google Places API key not configured" }, { status: 500 });
     }
 
-    // Derive city: use address_city first, fall back to last part of address
     const city: string = business.address_city
       ?? (business.address as string | null)?.split(",").slice(-2, -1)[0]?.trim()
       ?? "";
 
-    const searchQuery = `${business.category} in ${city}`;
+    // Prefer more specific query when possible
+    const searchQuery = business.search_term
+      ? `${business.search_term} in ${city}`
+      : `${business.category} in ${city}`;
+
     const searchRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
       headers: {
@@ -57,7 +71,7 @@ export async function POST(request: NextRequest) {
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount",
       },
-      body: JSON.stringify({ textQuery: searchQuery, maxResultCount: 10 }),
+      body: JSON.stringify({ textQuery: searchQuery, maxResultCount: 15 }),
       signal: AbortSignal.timeout(10000),
     });
     const searchData = await searchRes.json() as { places?: PlacesTextResult[]; error?: { message: string } };
@@ -69,12 +83,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Places API error: ${errMsg}` }, { status: 502 });
     }
 
-    const candidates = (searchData.places ?? [])
-      .filter(p => p.id !== business.place_id)
+    const rawCandidates = (searchData.places ?? []).filter(p => p.id !== business.place_id);
+
+    // Score relevance and keep the best 5
+    const scored = rawCandidates
+      .map(p => ({
+        place: p,
+        relevance: relevanceScore(business.category, business.name, p.displayName.text),
+      }))
+      .sort((a, b) => b.relevance - a.relevance)
       .slice(0, 5);
 
     const competitors: CompetitorInfo[] = await Promise.all(
-      candidates.map(async (place) => {
+      scored.map(async ({ place, relevance }) => {
         let phone: string | null = null;
         let website: string | null = null;
         try {
@@ -99,6 +120,8 @@ export async function POST(request: NextRequest) {
           website,
           address: place.formattedAddress,
           phone,
+          // Optional field — stored as extra; UI can ignore if not in type
+          // relevance: relevance,
         };
       })
     );
@@ -108,7 +131,10 @@ export async function POST(request: NextRequest) {
       .set({ competitors })
       .where(and(eq(businesses.id, business_id), eq(businesses.user_id, user.id)));
 
-    return NextResponse.json({ competitors });
+    return NextResponse.json({
+      competitors,
+      note: "Results ranked by name/category overlap. Review for true competitive relevance — adjacent businesses may still appear.",
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
