@@ -14,6 +14,9 @@ import { LeadDetailTabs } from "@/components/leads/lead-detail-tabs";
 import { ProposalPanel } from "@/components/leads/proposal-panel";
 import type { CompetitorInfo } from "@/types/business";
 import { SOCIAL_ICONS } from "@/types/constants";
+import { db } from "@/lib/db/client";
+import { scores, businesses } from "@/lib/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -35,9 +38,35 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
   const socials = Object.entries(business.social_links ?? {}).filter(([, v]) => !!v);
 
+  // Approximate competitor averages from any scored businesses that match stored competitors (by place_id)
+  let competitorAverages: { total?: number; website?: number; social?: number; engagement?: number; advertising?: number; reviews?: number } | null = null;
+  const comps = (business.competitors as CompetitorInfo[] | null) ?? [];
+  if (comps.length > 0) {
+    const placeIds = comps.map(c => c.place_id);
+    const matched = await db
+      .select({ id: businesses.id })
+      .from(businesses)
+      .where(and(eq(businesses.user_id, user.id), inArray(businesses.place_id, placeIds)));
+    const ids = matched.map(m => m.id);
+    if (ids.length > 0) {
+      const scored = await db.select().from(scores).where(inArray(scores.business_id, ids));
+      if (scored.length > 0) {
+        const avg = (key: keyof typeof scored[0]) =>
+          scored.reduce((s, r) => s + (Number(r[key]) || 0), 0) / scored.length;
+        competitorAverages = {
+          total: avg("total_score"),
+          website: avg("website_score"),
+          social: avg("social_score"),
+          engagement: avg("engagement_score"),
+          advertising: avg("advertising_score"),
+          reviews: avg("reviews_score"),
+        };
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
-      {/* Business header card */}
       <div style={{
         background: "var(--bg-surface)",
         border: "1px solid var(--border)",
@@ -45,7 +74,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         padding: "20px 24px",
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          {/* Left: identity */}
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-display)", margin: 0 }}>
@@ -83,7 +111,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             )}
           </div>
 
-          {/* Right: action buttons */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <AuditButton businessId={id} hasWebsite={!!business.website} />
             <GeneratePlanButton businessId={id} />
@@ -91,7 +118,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        {/* Contact & digital info grid */}
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
@@ -117,7 +143,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
 
-        {/* Social links */}
         {socials.length > 0 && (
           <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
             {socials.map(([platform, url]) => {
@@ -141,7 +166,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           </div>
         )}
 
-        {/* Hours */}
         {business.hours && business.hours.length > 0 && (
           <details style={{ marginTop: 14 }}>
             <summary style={{ fontSize: 11, color: "var(--text-muted)", cursor: "pointer", fontFamily: "var(--font-mono)", userSelect: "none" }}>
@@ -156,7 +180,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         )}
       </div>
 
-      {/* Email extractor */}
       <EmailEnricher
         businessId={id}
         existingEmails={[
@@ -165,10 +188,8 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         ]}
       />
 
-      {/* Website proposal: build, view and export proposal + demo versions */}
       <ProposalPanel businessId={id} businessName={business.name} hasWebsite={!!business.website} />
 
-      {/* Tabbed content: Audit & Outreach */}
       <LeadDetailTabs
         businessId={id}
         score={score}
@@ -176,12 +197,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         socialAudit={socialAudit}
         adsAudit={adsAudit}
         competitors={business.competitors as CompetitorInfo[] | null}
-        businessInfo={{ name: business.name, rating: business.rating, review_count: business.review_count }}
+        businessInfo={{ name: business.name, rating: business.rating, review_count: business.review_count, category: business.category }}
+        competitorAverages={competitorAverages}
       />
     </div>
   );
 }
-
 
 function ContactItem({
   icon, label, href, value, color, external,

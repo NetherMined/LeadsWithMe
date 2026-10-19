@@ -12,6 +12,13 @@
 
 import { generateCompletion } from "@/lib/ai/client";
 
+export interface BrandSignals {
+  primary?: string | null;
+  secondary?: string | null;
+  background?: string | null;
+  fonts?: string[];
+}
+
 export interface DemoBusiness {
   name: string;
   category?: string | null;
@@ -22,17 +29,14 @@ export interface DemoBusiness {
   socials?: Record<string, string> | null;
   /** Existing site, if any: the demo is then a redesign concept rather than a first website. */
   website?: string | null;
+  /** Scraped brand signals (colors + fonts) from existing site or top competitors. */
+  brand?: BrandSignals | null;
 }
 
 type CompleteFn = (system: string, user: string) => Promise<string>;
 
 const PROPOSAL_BUDGET = 9000;
 
-/**
- * The parts of a proposal the demo needs, most important first: Design Direction (palette,
- * fonts), then Structure, Content Brief and Brand Identity. Proposals run to ~20k characters,
- * so a plain prefix would cut off the design direction.
- */
 export function proposalForDemo(markdown: string): string {
   const sections = markdown.split(/^(?=## )/m);
   const pick = (re: RegExp) => sections.find((s) => re.test(s.split("\n")[0]));
@@ -53,21 +57,32 @@ export function buildDemoPrompt(business: DemoBusiness, proposalMarkdown?: strin
 
   const year = new Date().getFullYear();
 
+  const brandBlock = business.brand
+    ? `## SCRAPED BRAND SIGNALS (prefer these over generic category colors)
+Primary: ${business.brand.primary ?? "none"}
+Secondary: ${business.brand.secondary ?? "none"}
+Background: ${business.brand.background ?? "none"}
+Fonts: ${business.brand.fonts?.join(", ") || "none"}
+Use these as the starting point for the brand palette and typography. Derive Tailwind shades from the primary hex. Prefer Google Fonts that closely match the scraped families.
+`
+    : "";
+
   const system = `You are a senior web designer and front-end engineer who builds stunning, conversion-optimised one-page websites for local businesses.
 You use Tailwind CSS (CDN), Alpine.js for interactivity, Swiper.js for carousels, AOS for scroll animations, and Google Fonts.
 
 ABSOLUTE RULES:
 - Output ONLY raw HTML. Start your response with exactly <!DOCTYPE html> — nothing before it.
 - No markdown, no code fences, no explanation before or after the HTML.
-- Every CDN dependency must use the exact URLs specified in the user prompt. The only exception: the Google Fonts families may be swapped for the fonts a website proposal specifies.
+- Every CDN dependency must use the exact URLs specified in the user prompt. The only exception: the Google Fonts families may be swapped for the fonts a website proposal or scraped brand signals specify.
 - All JavaScript initialisation must live inside a DOMContentLoaded listener.
 - The result must be a fully working, self-contained single HTML file.
 - Fully responsive (mobile-first), modern, clean, and conversion-focused.
-- Use the real business name, address, phone, and category throughout.`;
+- Use the real business name, address, phone, and category throughout.
+- Avoid generic AI-slop layouts. Vary structure and visual density based on the business type and any brand signals provided.`;
 
   const situation = business.website
-    ? `Generate a complete, professional one-page demo website for this business. It already has a website (${business.website}) that is underperforming; this demo is the modern redesign that replaces it.`
-    : "Generate a complete, professional one-page demo website for this business that currently has NO website.";
+    ? `Generate a complete, professional one-page demo website for this business. It already has a website (${business.website}) that is underperforming; this demo is the modern redesign that replaces it while respecting existing brand signals where provided.`
+    : "Generate a complete, professional one-page demo website for this business that currently has NO website. Draw visual direction from any scraped competitor/brand signals and category standards.";
 
   const user = `${situation}
 Make it look like a real, expensive, custom-built site a marketing agency would be proud of.
@@ -81,7 +96,7 @@ Google Rating: ${business.rating ?? "5"}★
 Description: ${business.description ?? "Quality local business"}
 Social media: ${socials}
 
-${proposalMarkdown ? `## WEBSITE PROPOSAL (follow its page structure, copy, colour palette and typography where it gives them)\n${proposalForDemo(proposalMarkdown)}\n` : ""}
+${brandBlock}${proposalMarkdown ? `## WEBSITE PROPOSAL (follow its page structure, copy, colour palette and typography where it gives them)\n${proposalForDemo(proposalMarkdown)}\n` : ""}
 
 ---
 
@@ -123,13 +138,9 @@ ${proposalMarkdown ? `## WEBSITE PROPOSAL (follow its page structure, copy, colo
   }
 </script>
 
-${proposalMarkdown ? `BRAND COLOURS AND FONTS COME FROM THE WEBSITE PROPOSAL ABOVE (section "Design Direction"):
-- Its primary colour must be brand-600 exactly; derive the lighter (50-500) and darker (700-900) shades from it.
-- Use its accent/secondary colour (as an arbitrary Tailwind value, e.g. bg-[#hex]) for highlights and secondary buttons.
-- If it names Google Fonts for headings and body, load those in the Google Fonts <link> and use them in fontFamily (display = heading font, sans = body font) instead of Inter / Plus Jakarta Sans.
-Only if the proposal gives no palette, fall back to the category guide below.
+${business.brand?.primary ? `BRAND COLOURS COME FROM SCRAPED SIGNALS ABOVE (primary ${business.brand.primary}). Derive the brand-50 through brand-900 scale from that hex. ` : ""}${proposalMarkdown ? `Also honour any Design Direction section in the proposal. ` : ""}Only if neither signals nor proposal give a palette, fall back to the category guide below.
 
-` : ""}Pick brand colours appropriate for "${business.category ?? "local business"}":
+Pick brand colours appropriate for "${business.category ?? "local business"}":
 - Restaurant/Café/Food → warm amber/orange
 - Hair/Beauty/Salon/Spa → rose/pink or soft purple
 - Law/Finance/Consulting → navy/slate with gold
@@ -232,17 +243,10 @@ Return the full HTML document now, starting with <!DOCTYPE html>.`;
   return { system, user };
 }
 
-/**
- * Strip code fences and prose around the document and return clean HTML.
- * A reply that hit the output limit arrives in parts (see finalAnswer() in lib/ai/opencode.ts),
- * and a continuation may open its own fence mid-document, so fence lines are dropped wherever
- * they are and the document runs from its first opening tag to the last </html>.
- */
 export function extractHtml(raw: string): string {
   let html = raw.replace(/```[a-z]*[ \t]*\r?\n?/gi, "").trim();
   const starts = [...html.matchAll(/<!DOCTYPE html>|<html[\s>]/gi)].map((m) => m.index);
   if (starts.length) {
-    // A reply that restarted the document from scratch: keep the last complete copy.
     const complete = starts.filter((i) => /<\/html>/i.test(html.slice(i)));
     const doctypes = complete.filter((i) => /^<!DOCTYPE/i.test(html.slice(i)));
     html = html.slice(doctypes.at(-1) ?? complete.at(-1) ?? starts[0]);

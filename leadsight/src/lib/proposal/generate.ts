@@ -38,7 +38,6 @@ async function findCompetitorWebsites(
     const data = await res.json() as { web?: { results?: Array<{ title: string; url: string; description?: string; meta_url?: { hostname?: string } }> } };
     const results = data.web?.results ?? [];
 
-    // Filter: exclude directories, social media, and the business itself
     const BLOCKED = new Set(["yelp.com", "yellowpages.com", "facebook.com", "instagram.com", "tripadvisor.com", "google.com", "linkedin.com"]);
     const competitors: Array<{ name: string; url: string; description: string }> = [];
 
@@ -61,7 +60,6 @@ async function findCompetitorWebsites(
   }
 }
 
-/** What the audit found wrong with an existing site, for the redesign variant of the prompt. */
 function currentSiteSummary(website: string, audit: WebsiteAudit | null | undefined, score: DigitalPresenceScore | null | undefined): string {
   if (!audit) return `- URL: ${website}\n- Not audited yet; infer improvements from the category and competitors.`;
   const lines = [
@@ -80,10 +78,6 @@ export function proposalFilename(businessName: string): string {
   return `${businessName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-website-proposal.md`;
 }
 
-/**
- * Writes a Markdown website proposal. Businesses without a website get a new-site proposal;
- * businesses with one get a redesign proposal grounded in their website audit.
- */
 export async function generateWebsiteProposal({ business: biz, websiteAudit, score }: ProposalInput): Promise<GeneratedProposal> {
   const city = biz.address_city ?? biz.address?.split(",").slice(-2, -1)[0]?.trim() ?? "";
   const competitors = await findCompetitorWebsites(biz.name, biz.category, city);
@@ -107,11 +101,18 @@ export async function generateWebsiteProposal({ business: biz, websiteAudit, sco
   const systemPrompt = `You are a professional web design consultant and digital strategist specializing in small business websites.
 Generate detailed, actionable website proposal documents in Markdown format.
 Be specific, practical, and tailored to the business category and location.
-Use concrete examples, real design suggestions, and specific content recommendations.`;
+Use concrete examples, real design suggestions, and specific content recommendations.
+
+CRITICAL DESIGN RULES:
+- Avoid generic "AI slop" layouts (identical hero + 3 cards + testimonials templates).
+- Vary structure based on the business type and competitor analysis.
+- When the business has an existing site or strong social presence, match or evolve their branding (colors, tone, photography style).
+- When no site exists, draw from the best-matching competitors' design patterns plus current market standards for the category (clear CTAs, social proof, mobile-first, local SEO).
+- Specify concrete hex colors, font pairings, and layout choices that feel distinctive.`;
 
   const situation = isRedesign
-    ? `Generate a comprehensive website REDESIGN proposal for the following business. It already has a website; the proposal must explain what is holding the current site back (use the audit findings below) and how the new site fixes each problem.`
-    : `Generate a comprehensive website proposal document for the following business that currently has NO website.`;
+    ? `Generate a comprehensive website REDESIGN proposal for the following business. It already has a website; the proposal must explain what is holding the current site back (use the audit findings below) and how the new site fixes each problem while staying true to or elevating the existing brand.`
+    : `Generate a comprehensive website proposal document for the following business that currently has NO website. Infer brand direction from social presence, category norms, and competitor sites.`;
 
   const currentSite = isRedesign
     ? `\n## Current Website (audit findings)\n${currentSiteSummary(biz.website!, websiteAudit, score)}\n`
@@ -167,11 +168,11 @@ ${brandHint}
 For each competitor found, analyze:
 - What they do well on their website
 - Gaps you can exploit
-- Design patterns worth referencing
+- Specific design patterns (layout, color use, CTA placement, photography style) worth referencing or differentiating from
 
 ## 4. Proposed Website Structure
-List pages and key sections for each page:
-- Homepage (sections: hero, services, about, testimonials, contact)
+List pages and key sections for each page. Vary the structure from the generic hero+cards template where appropriate for this business type.
+- Homepage (sections tailored to the category)
 - [Other relevant pages for this business type]
 
 ## 5. Content Brief
@@ -182,10 +183,12 @@ For each page, specify:
 - Call-to-action text
 
 ## 6. Design Direction
-- Color palette (3 colors with hex codes, justified by brand/category)
-- Typography suggestions (heading font, body font)
-- Visual style (photography style, icon style, layout mood)
+Be concrete and distinctive:
+- Color palette (3-5 colors with hex codes, justified by existing brand if present, otherwise by category + competitor signals)
+- Typography suggestions (specific heading + body font pairings)
+- Visual style (photography style, icon style, layout mood, density)
 - Mobile-first considerations
+- Explicit note on how this avoids looking like every other AI-generated site
 
 ## 7. Technical Recommendations
 - Recommended platform (e.g., Next.js, Webflow, WordPress — justify choice)
@@ -197,14 +200,13 @@ For each page, specify:
 A ready-to-paste prompt for building this site with an AI coding tool (Cursor/Claude/Bolt):
 
 \`\`\`
-[Complete AI prompt that includes: business details, design spec, page structure, tech stack, and specific requirements to build a demo website]
+[Complete AI prompt that includes: business details, the specific design spec from section 6, page structure, tech stack, and requirements to build a distinctive demo website that matches the brand direction]
 \`\`\`
 
 ## 9. Next Steps
 Numbered action list for getting started.`;
 
   const result = await generateCompletion(systemPrompt, userPrompt, { maxTokens: 3000 });
-  // Providers sometimes answer with an error notice (e.g. out of credits) instead of a proposal.
   const sections = result.text.match(/^#{1,3}\s/gm)?.length ?? 0;
   if (result.text.length < 1500 || sections < 3) {
     throw new Error(`AI did not return a usable proposal: ${result.text.slice(0, 160).trim()}`);
